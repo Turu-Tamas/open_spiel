@@ -102,8 +102,12 @@ set(GAME_SOURCES
   hive/hive.h
   hive/hive_board.cc
   hive/hive_board.h
-  hungarian_tarok/hungarian_tarok.cc
   hungarian_tarok/hungarian_tarok.h
+  hungarian_tarok/hungarian_tarok.cc
+  hungarian_tarok/bidding.cc
+  hungarian_tarok/bidding.h
+  hungarian_tarok/game_phase.h
+  hungarian_tarok/setup.h
   kriegspiel/kriegspiel.cc
   kriegspiel/kriegspiel.h
   kuhn_poker/kuhn_poker.cc
