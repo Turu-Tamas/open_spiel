@@ -44,7 +44,7 @@ class GamePhase {
 	virtual Player CurrentPlayer() const = 0;
 	virtual std::vector<Action> LegalActions() const = 0;
 
-	virtual void ApplyAction(Action action) = 0;
+	virtual void DoApplyAction(Action action) = 0;
 
 	virtual bool GameOver() const;
 	virtual bool PhaseOver() const = 0;

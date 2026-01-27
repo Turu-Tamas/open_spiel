@@ -21,7 +21,7 @@ namespace hungarian_tarok {
             }
             return actions;
         }
-        void ApplyAction(Action action) override {
+        void DoApplyAction(Action action) override {
             SPIEL_CHECK_LT(current_card_, kDeckSize);
             // Action is the player ID who receives the next card.
             deck_[current_card_] = action;

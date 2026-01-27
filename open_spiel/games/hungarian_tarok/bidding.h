@@ -13,9 +13,13 @@ namespace hungarian_tarok {
             return current_player_;
         }
         std::vector<Action> LegalActions() const override;
-        void ApplyAction(Action action) override;
+        void DoApplyAction(Action action) override;
         bool PhaseOver() const override {
             return current_player_ == kTerminalPlayerId;
+        }
+        Player GetDeclarer() const {
+            SPIEL_CHECK_TRUE(PhaseOver());
+            return winning_bidder_.value();
         }
     private:
         Player current_player_ = 0;

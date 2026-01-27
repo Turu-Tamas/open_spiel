@@ -26,7 +26,7 @@ namespace hungarian_tarok {
         }
         current_player_ = next_player;
     }
-    void BiddingPhase::ApplyAction(Action action) {
+    void BiddingPhase::DoApplyAction(Action action) {
         SPIEL_CHECK_FALSE(PhaseOver());
         std::vector<Action> legal_actions = LegalActions();
         SPIEL_CHECK_TRUE(std::find(legal_actions.begin(), legal_actions.end(), action) != legal_actions.end());
