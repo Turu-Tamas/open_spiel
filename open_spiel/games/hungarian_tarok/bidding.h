@@ -34,6 +34,9 @@ namespace hungarian_tarok {
             SPIEL_CHECK_TRUE(PhaseOver());
             return std::make_unique<DealTalonPhase>(deck_, *this);
         }
+        std::unique_ptr<GamePhase> Clone() const override {
+            return std::make_unique<BiddingPhase>(*this);
+        }
     private:
         Player current_player_ = 0;
         int lowest_bid_ = 4;

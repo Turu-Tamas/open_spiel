@@ -76,6 +76,9 @@ namespace hungarian_tarok {
             SPIEL_CHECK_TRUE(PhaseOver());
             return std::make_unique<SkartPhase>(deck_, declarer_);
         }
+        std::unique_ptr<GamePhase> Clone() const override {
+            return std::make_unique<DealTalonPhase>(*this);
+        }
     private:
         Deck deck_;
         Player current_player_;

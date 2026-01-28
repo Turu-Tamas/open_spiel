@@ -40,11 +40,12 @@ namespace hungarian_tarok {
 // Minimal placeholder action set.
 enum ActionType : Action { kPass = 0 };
 
-class HungariantarokGame;
+class HungarianTarokGame;
 
-class HungariantarokState : public State {
+class HungarianTarokState : public State {
  public:
-  explicit HungariantarokState(std::shared_ptr<const Game> game);
+  explicit HungarianTarokState(std::shared_ptr<const Game> game);
+  HungarianTarokState(const HungarianTarokState& other);
 
   Player CurrentPlayer() const override;
   std::string ActionToString(Player player, Action move) const override;
@@ -64,14 +65,12 @@ class HungariantarokState : public State {
   void DoApplyAction(Action move) override;
 
  private:
-  Player cur_player_;
-  int step_;
-  bool chance_done_;
+  std::unique_ptr<GamePhase> phase_;
 };
 
-class HungariantarokGame : public Game {
+class HungarianTarokGame : public Game {
  public:
-  explicit HungariantarokGame(const GameParameters& params);
+  explicit HungarianTarokGame(const GameParameters& params);
 
   int NumDistinctActions() const override { return 1; }
   std::unique_ptr<State> NewInitialState() const override;
@@ -90,7 +89,6 @@ class HungariantarokGame : public Game {
       const GameParameters& params) const override;
 
  private:
-  int num_players_;
 };
 
 }  // namespace hungarian_tarok

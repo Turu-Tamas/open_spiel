@@ -12,14 +12,14 @@
 namespace open_spiel {
 namespace hungarian_tarok {
 
-class HungariantarokState;
+class HungarianTarokState;
 
 // Abstract interface for a single phase of Hungarian Tarok.
 //
 // Intended usage pattern:
-// - `HungariantarokState` owns the current phase (e.g. via
+// - `HungarianTarokState` owns the current phase (e.g. via
 //   `std::unique_ptr<GamePhase> phase_`).
-// - `HungariantarokState` implements the OpenSpiel `State` virtuals by
+// - `HungarianTarokState` implements the OpenSpiel `State` virtuals by
 //   delegating to `*phase_`.
 // - When a phase finishes, the state can replace `phase_` with the successor.
 class GamePhase {
@@ -40,6 +40,7 @@ class GamePhase {
 	// virtual std::string ObservationString(Player player) const = 0;
 	// virtual void ObservationTensor(Player player, absl::Span<float> values) const = 0;
 	virtual std::unique_ptr<GamePhase> NextPhase() const = 0;
+	virtual std::unique_ptr<GamePhase> Clone() const = 0;
 };
 
 }  // namespace hungarian_tarok

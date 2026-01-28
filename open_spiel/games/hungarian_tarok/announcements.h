@@ -85,6 +85,9 @@ namespace hungarian_tarok {
         std::unique_ptr<GamePhase> NextPhase() const override {
             return std::make_unique<PlayPhase>(deck_, declarer_);
         }
+        std::unique_ptr<GamePhase> Clone() const override {
+            return std::make_unique<AnnouncementsPhase>(*this);
+        }
     private:
         Player current_player_ = 0;
         Deck deck_;

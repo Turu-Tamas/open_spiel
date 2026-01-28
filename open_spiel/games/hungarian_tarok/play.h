@@ -70,7 +70,13 @@ namespace hungarian_tarok {
         bool GameOver() const override {
             return PhaseOver();
         }
-
+        std::unique_ptr<GamePhase> NextPhase() const override {
+            SPIEL_CHECK_TRUE(PhaseOver());
+            return nullptr; // no next phase, game over
+        }
+        std::unique_ptr<GamePhase> Clone() const override {
+            return std::make_unique<PlayPhase>(*this);
+        }
     private:
         Deck &deck_;
         Player declarer_;

@@ -14,6 +14,7 @@
 
 #include "open_spiel/games/hungarian_tarok/hungarian_tarok.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
@@ -39,7 +40,7 @@ namespace hungarian_tarok {
 namespace {
 
 const GameType kGameType{/*short_name=*/"hungarian_tarok",
-                         /*long_name=*/"Hungarian Tarok (placeholder)",
+                         /*long_name=*/"Hungarian Tarok",
                          GameType::Dynamics::kSequential,
                          GameType::ChanceMode::kExplicitStochastic,
                          GameType::Information::kPerfectInformation,
@@ -52,10 +53,10 @@ const GameType kGameType{/*short_name=*/"hungarian_tarok",
                          /*provides_observation_string=*/true,
                          /*provides_observation_tensor=*/true,
                          /*parameter_specification=*/
-                         {{"players", GameParameter(kNumPlayers)}}};
+                         {}};
 
 std::shared_ptr<const Game> Factory(const GameParameters& params) {
-  return std::shared_ptr<const Game>(new HungariantarokGame(params));
+  return std::shared_ptr<const Game>(new HungarianTarokGame(params));
 }
 
 REGISTER_SPIEL_GAME(kGameType, Factory);
@@ -65,16 +66,18 @@ RegisterSingleTensorObserver single_tensor(kGameType.short_name);
 
 namespace {
 
-class HungariantarokObserver final : public Observer {
+class HungarianTarokObserver final : public Observer {
  public:
-  explicit HungariantarokObserver(IIGObservationType iig_obs_type)
+  explicit HungarianTarokObserver(IIGObservationType iig_obs_type)
       : Observer(/*has_string=*/true, /*has_tensor=*/true),
         iig_obs_type_(iig_obs_type) {}
+
+  ~HungarianTarokObserver() noexcept override = default;
 
   void WriteTensor(const State& observed_state, int player,
                    Allocator* allocator) const override {
     const auto& state =
-        open_spiel::down_cast<const HungariantarokState&>(observed_state);
+        open_spiel::down_cast<const HungarianTarokState&>(observed_state);
     SPIEL_CHECK_GE(player, 0);
     SPIEL_CHECK_LT(player, state.NumPlayers());
 
@@ -95,13 +98,12 @@ class HungariantarokObserver final : public Observer {
     // phase[0] == 1 once the initial chance action has happened.
     phase_out.at(0) = state.IsChanceNode() ? 0 : 1;
 
-    (void)iig_obs_type_;  // Placeholder: not using public/private flags yet.
   }
 
   std::string StringFrom(const State& observed_state,
                          int player) const override {
     const auto& state =
-        open_spiel::down_cast<const HungariantarokState&>(observed_state);
+        open_spiel::down_cast<const HungarianTarokState&>(observed_state);
     return absl::StrCat("observer=", player, " cur=", state.CurrentPlayer(),
                         " terminal=", state.IsTerminal());
   }
@@ -112,116 +114,99 @@ class HungariantarokObserver final : public Observer {
 
 }  // namespace
 
-HungariantarokState::HungariantarokState(std::shared_ptr<const Game> game)
+HungarianTarokState::HungarianTarokState(std::shared_ptr<const Game> game)
     : State(std::move(game)),
-      cur_player_(kChancePlayerId),
-      step_(0),
-      chance_done_(false) {}
+      phase_(absl::make_unique<GamePhase>(new SetupPhase())) {}
 
-int HungariantarokState::CurrentPlayer() const {
-  if (IsTerminal()) {
-    return kTerminalPlayerId;
-  } else {
-    return cur_player_;
-  }
+HungarianTarokState::HungarianTarokState(const HungarianTarokState& other)
+    : State(other),
+      phase_(other.phase_->Clone()) {}
+
+int HungarianTarokState::CurrentPlayer() const {
+  return phase_->CurrentPlayer();
 }
 
-void HungariantarokState::DoApplyAction(Action move) {
-  if (IsChanceNode()) {
-    // Single placeholder chance action.
-    SPIEL_CHECK_EQ(move, 0);
-    chance_done_ = true;
-    cur_player_ = 0;
+void HungarianTarokState::DoApplyAction(Action move) {
+  phase_->DoApplyAction(move);
+  if (phase_->GameOver()) {
     return;
   }
-
-  // Player node: only Pass.
-  SPIEL_CHECK_EQ(move, ActionType::kPass);
-  step_++;
-  if (step_ >= NumPlayers()) {
-    cur_player_ = kTerminalPlayerId;
-  } else {
-    cur_player_ = step_;
+  if (phase_->PhaseOver()) {
+    phase_ = phase_->NextPhase();
   }
 }
 
-std::vector<Action> HungariantarokState::LegalActions() const {
-  if (IsTerminal()) return {};
-  if (IsChanceNode()) return {0};
-  return {ActionType::kPass};
+std::vector<Action> HungarianTarokState::LegalActions() const {
+  return phase_->LegalActions();
 }
 
-std::string HungariantarokState::ActionToString(Player player, Action move) const {
+std::string HungarianTarokState::ActionToString(Player player, Action move) const {
   return GetGame()->ActionToString(player, move);
 }
 
-std::string HungariantarokState::ToString() const {
-  return absl::StrCat("chance_done=", chance_done_, " step=", step_,
-                      " cur=", cur_player_);
+std::string HungarianTarokState::ToString() const {
+  return "TODO";
 }
 
-bool HungariantarokState::IsTerminal() const {
-  return chance_done_ && step_ >= NumPlayers();
+bool HungarianTarokState::IsTerminal() const {
+  return phase_->GameOver();
 }
 
-std::vector<double> HungariantarokState::Returns() const {
+std::vector<double> HungarianTarokState::Returns() const {
   return std::vector<double>(NumPlayers(), 0.0);
 }
 
-std::string HungariantarokState::ObservationString(Player player) const {
+std::string HungarianTarokState::ObservationString(Player player) const {
   const auto& game =
-      open_spiel::down_cast<const HungariantarokGame&>(*game_);
+      open_spiel::down_cast<const HungarianTarokGame&>(*game_);
   // Use the game's default observer.
   auto observer = game.MakeObserver(kDefaultObsType, /*params=*/{});
   return observer->StringFrom(*this, player);
 }
 
-void HungariantarokState::ObservationTensor(Player player,
+void HungarianTarokState::ObservationTensor(Player player,
                                    absl::Span<float> values) const {
   std::fill(values.begin(), values.end(), 0.0f);
-  if (player >= 0 && player < NumPlayers()) {
-    values[player] = 1.0f;  // observer one-hot
-  }
-  // last element indicates whether chance is done.
-  values[NumPlayers()] = chance_done_ ? 1.0f : 0.0f;
 }
 
-std::unique_ptr<State> HungariantarokState::Clone() const {
-  return std::unique_ptr<State>(new HungariantarokState(*this));
+std::unique_ptr<State> HungarianTarokState::Clone() const {
+  return std::unique_ptr<State>(new HungarianTarokState(*this));
 }
 
-std::vector<std::pair<Action, double>> HungariantarokState::ChanceOutcomes() const {
+std::vector<std::pair<Action, double>> HungarianTarokState::ChanceOutcomes() const {
   SPIEL_CHECK_TRUE(IsChanceNode());
-  return {{0, 1.0}};
+  std::vector<std::pair<Action, double>> outcomes;
+  std::vector<Action> legal_actions = LegalActions();
+  double prob = 1.0 / legal_actions.size();
+  for (Action action : legal_actions) {
+    outcomes.push_back({action, prob});
+  }
+  return outcomes;
 }
 
-HungariantarokGame::HungariantarokGame(const GameParameters& params)
-    : Game(kGameType, params),
-      num_players_(ParameterValue<int>("players")) {
-  SPIEL_CHECK_GE(num_players_, kGameType.min_num_players);
-  SPIEL_CHECK_LE(num_players_, kGameType.max_num_players);
+HungarianTarokGame::HungarianTarokGame(const GameParameters& params)
+    : Game(kGameType, params) {
 }
 
-std::unique_ptr<State> HungariantarokGame::NewInitialState() const {
-  return absl::make_unique<HungariantarokState>(shared_from_this());
+std::unique_ptr<State> HungarianTarokGame::NewInitialState() const {
+  return absl::make_unique<HungarianTarokState>(shared_from_this());
 }
 
-std::vector<int> HungariantarokGame::ObservationTensorShape() const {
-  // observer one-hot (num_players) + 1 phase bit.
-  return {num_players_ + 1};
+std::vector<int> HungarianTarokGame::ObservationTensorShape() const {
+  return {1};
 }
 
-std::shared_ptr<Observer> HungariantarokGame::MakeObserver(
+std::shared_ptr<Observer> HungarianTarokGame::MakeObserver(
     absl::optional<IIGObservationType> iig_obs_type,
     const GameParameters& params) const {
   if (params.empty()) {
-    return std::make_shared<HungariantarokObserver>(
+    return std::make_shared<HungarianTarokObserver>(
         iig_obs_type.value_or(kDefaultObsType));
   }
   return MakeRegisteredObserver(iig_obs_type, params);
 }
 
-std::string HungariantarokGame::ActionToString(Player player, Action action) const {
+std::string HungarianTarokGame::ActionToString(Player player, Action action) const {
   if (player == kChancePlayerId) {
     return "Chance";
   }
@@ -229,11 +214,10 @@ std::string HungariantarokGame::ActionToString(Player player, Action action) con
   return absl::StrCat("Action(", action, ")");
 }
 
-int HungariantarokGame::NumPlayers() const { return num_players_; }
+int HungarianTarokGame::NumPlayers() const { return kNumPlayers; }
 
-int HungariantarokGame::MaxGameLength() const {
-  // 1 chance action + one action per player.
-  return 1 + num_players_;
+int HungarianTarokGame::MaxGameLength() const {
+  return 150; // TODO
 }
 
 }  // namespace hungarian_tarok

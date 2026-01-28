@@ -50,6 +50,9 @@ namespace hungarian_tarok {
             SPIEL_CHECK_TRUE(PhaseOver());
             return std::make_unique<AnnouncementsPhase>(declarer_, deck_);
         }
+        std::unique_ptr<GamePhase> Clone() const override {
+            return std::make_unique<SkartPhase>(*this);
+        }
     private:
         Deck deck_;
         Player declarer_;
