@@ -37,6 +37,9 @@ namespace hungarian_tarok {
         const Deck &GetDeck() const {
             return deck_;
         }
+        Deck &GetDeck() {
+            return deck_;
+        }
 
     private:
         Deck deck_;

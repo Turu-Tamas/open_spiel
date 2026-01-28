@@ -1,3 +1,5 @@
+#include "spiel_utils.h"
+
 namespace open_spiel {
 namespace hungarian_tarok {
     typedef int Card;
@@ -21,7 +23,9 @@ namespace hungarian_tarok {
     };
 
     constexpr Card MakeTarok(int rank) {
-        return rank;
+        SPIEL_CHECK_GE(rank, 1);
+        SPIEL_CHECK_LE(rank, 22);
+        return rank - 1;
     }
     const Card kSkiz = MakeTarok(22);
     const Card kPagat = MakeTarok(1);
