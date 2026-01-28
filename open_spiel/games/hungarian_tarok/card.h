@@ -1,3 +1,6 @@
+#ifndef OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_CARD_H_
+#define OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_CARD_H_
+
 #include "spiel_utils.h"
 
 namespace open_spiel {
@@ -71,3 +74,5 @@ namespace hungarian_tarok {
     constexpr Player WonCards(Player p) { return p + kNumPlayers; }
 } // namespace hungarian_tarok
 } // namespace open_spiel
+
+#endif  // OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_CARD_H_

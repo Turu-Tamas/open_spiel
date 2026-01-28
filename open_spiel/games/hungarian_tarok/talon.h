@@ -1,17 +1,18 @@
+#ifndef OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_TALON_H_
+#define OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_TALON_H_
+
 #include "spiel.h"
 #include "game_phase.h"
 #include "setup.h"
 #include "bidding.h"
-
-#ifndef OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_TALON_H_
-#define OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_TALON_H_
+#include "skart.h"
 
 namespace open_spiel {
 namespace hungarian_tarok {
     const int kTalonSize = 6;
     class DealTalonPhase : public GamePhase {
     public:
-        DealTalonPhase(SetupPhase &setup_phase, const BiddingPhase &bidding_phase) : deck_(setup_phase.GetDeck()) {
+        DealTalonPhase(Deck deck, const BiddingPhase &bidding_phase) : deck_(deck), declarer_(bidding_phase.GetDeclarer()) {
             Player declarer = bidding_phase.GetDeclarer();
             int declarer_cards_to_take = bidding_phase.GetWinningBid();
             cards_to_take_ = {0, 0, 0, 0};
@@ -71,14 +72,18 @@ namespace hungarian_tarok {
         bool PhaseOver() const override {
             return current_player_ == kTerminalPlayerId;
         }
-
+        std::unique_ptr<GamePhase> NextPhase() const override {
+            SPIEL_CHECK_TRUE(PhaseOver());
+            return std::make_unique<SkartPhase>(deck_, declarer_);
+        }
     private:
-        Deck &deck_;
+        Deck deck_;
         Player current_player_;
         std::array<Card, kTalonSize> talon_cards_;
         std::array<bool, kTalonSize> talon_taken_ = {false};
         std::array<int, kNumPlayers> cards_to_take_;
         int talon_taken_count_ = 0;
+        Player declarer_;
     };
 } // namespace hungarian_tarok
 } // namespace open_spiel

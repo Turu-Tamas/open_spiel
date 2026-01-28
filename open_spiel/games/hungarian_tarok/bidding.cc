@@ -2,11 +2,10 @@
 
 namespace open_spiel {
 namespace hungarian_tarok {
-    BiddingPhase::BiddingPhase(const SetupPhase &setup_phase) {
-        const Deck &deck = setup_phase.GetDeck();
-        has_honour_[deck[kSkiz]] = true;
-        has_honour_[deck[kPagat]] = true;
-        has_honour_[deck[kXXI]] = true;
+    BiddingPhase::BiddingPhase(const SetupPhase &setup_phase) : deck_(setup_phase.GetDeck()) {
+        has_honour_[deck_[kSkiz]] = true;
+        has_honour_[deck_[kPagat]] = true;
+        has_honour_[deck_[kXXI]] = true;
     }
     std::vector<Action> BiddingPhase::LegalActions() const {
         SPIEL_CHECK_FALSE(PhaseOver());

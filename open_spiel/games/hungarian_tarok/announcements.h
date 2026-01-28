@@ -1,15 +1,17 @@
+#ifndef OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_ANNOUNCEMENTS_H_
+#define OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_ANNOUNCEMENTS_H_
+
 #include "spiel.h"
 #include "game_phase.h"
 #include "card.h"
 #include "bidding.h"
 #include "setup.h"
+#include "play.h"
 
 #include <array>
 #include <optional>
 #include <vector>
-
-#ifndef OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_ANNOUNCEMENTS_H_
-#define OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_ANNOUNCEMENTS_H_
+#include <memory>
 
 namespace open_spiel {
 namespace hungarian_tarok {
@@ -63,10 +65,10 @@ namespace hungarian_tarok {
 
     class AnnouncementsPhase : public GamePhase {
     public:
-        AnnouncementsPhase(const BiddingPhase &bidding_phase, SetupPhase &setup_phase)
-            : current_player_(bidding_phase.GetDeclarer()),
-              deck_(setup_phase.GetDeck()),
-              declarer_(bidding_phase.GetDeclarer()) {
+        AnnouncementsPhase(Player declarer, Deck deck)
+            : current_player_(declarer),
+              deck_(deck),
+              declarer_(declarer) {
         }
         ~AnnouncementsPhase() override = default;
         Player CurrentPlayer() const override {
@@ -80,9 +82,12 @@ namespace hungarian_tarok {
         bool GameOver() const override {
             return false;
         }
+        std::unique_ptr<GamePhase> NextPhase() const override {
+            return std::make_unique<PlayPhase>(deck_, declarer_);
+        }
     private:
         Player current_player_ = 0;
-        const Deck &deck_;
+        Deck deck_;
 
         struct Side {
             std::array<bool, kNumAnnouncementTypes> announced = {false};

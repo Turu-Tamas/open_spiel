@@ -32,6 +32,7 @@
 #include "setup.h"
 #include "talon.h"
 #include "skart.h"
+#include "play.h"
 
 namespace open_spiel {
 namespace hungarian_tarok {

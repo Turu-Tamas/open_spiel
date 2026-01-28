@@ -1,16 +1,17 @@
+#ifndef OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_SKART_H_
+#define OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_SKART_H_
+
 #include "spiel.h"
 #include "game_phase.h"
 #include "setup.h"
 #include "bidding.h"
-
-#ifndef OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_SKART_H_
-#define OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_SKART_H_
+#include "announcements.h"
 
 namespace open_spiel {
 namespace hungarian_tarok {
     class SkartPhase : public GamePhase {
     public:
-        SkartPhase(SetupPhase &setup_phase, Player declarer) : deck_(setup_phase.GetDeck()), declarer_(declarer) {}
+        SkartPhase(Deck deck, Player declarer) : deck_(deck), declarer_(declarer) {}
         ~SkartPhase() override = default;
 
         Player CurrentPlayer() const override {
@@ -45,8 +46,12 @@ namespace hungarian_tarok {
         bool GameOver() const override {
             return false;
         }
+        std::unique_ptr<GamePhase> NextPhase() const override {
+            SPIEL_CHECK_TRUE(PhaseOver());
+            return std::make_unique<AnnouncementsPhase>(declarer_, deck_);
+        }
     private:
-        Deck &deck_;
+        Deck deck_;
         Player declarer_;
         Player current_player_ = 0;
         int cards_discarded_ = 0;

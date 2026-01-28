@@ -1,10 +1,10 @@
+#ifndef OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_PLAY_H_
+#define OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_PLAY_H_
+
 #include "spiel.h"
 #include "game_phase.h"
 #include "setup.h"
 #include "bidding.h"
-
-#ifndef OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_PLAY_H_
-#define OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_PLAY_H_
 
 namespace open_spiel {
 namespace hungarian_tarok {
@@ -12,7 +12,7 @@ namespace hungarian_tarok {
 
     class PlayPhase : public GamePhase {
     public:
-        PlayPhase(SetupPhase &setup_phase, Player declarer) : deck_(setup_phase.GetDeck()), declarer_(declarer) {}
+        PlayPhase(Deck deck, Player declarer) : deck_(deck), declarer_(declarer) {}
         ~PlayPhase() override = default;
 
         Player CurrentPlayer() const override {

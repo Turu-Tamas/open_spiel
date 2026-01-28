@@ -1,6 +1,10 @@
+#ifndef OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_SETUP_H_
+#define OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_SETUP_H_
+
 #include "game_phase.h"
 #include "card.h"
 #include "spiel.h"
+#include "spiel_utils.h"
 
 namespace open_spiel {
 namespace hungarian_tarok {
@@ -39,6 +43,10 @@ namespace hungarian_tarok {
         Deck &GetDeck() {
             return deck_;
         }
+        std::unique_ptr<GamePhase> NextPhase() const override {
+            SPIEL_CHECK_TRUE(PhaseOver());
+            return std::make_unique<BiddingPhase>(*this);
+        }
 
     private:
         Deck deck_;
@@ -47,3 +55,5 @@ namespace hungarian_tarok {
     };
 } // namespace hungarian_tarok
 } // namespace open_spiel
+
+#endif  // OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_SETUP_H_
