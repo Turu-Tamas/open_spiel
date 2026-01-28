@@ -33,5 +33,10 @@ namespace hungarian_tarok {
     constexpr Card MakeSuitCard(int suit, int rank) {
         return kNumTaroks + suit * kNumRanksPerSuit + rank;
     }
+
+    typedef std::array<Player, kDeckSize> Deck;
+    const Player kTalon = -1;
+    const Player kDeclarerSkart = -2;
+    const Player kOpponentsSkart = -3;
 } // namespace hungarian_tarok
 } // namespace open_spiel

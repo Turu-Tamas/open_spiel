@@ -21,6 +21,10 @@ namespace hungarian_tarok {
             SPIEL_CHECK_TRUE(PhaseOver());
             return winning_bidder_.value();
         }
+        int GetWinningBid() const {
+            SPIEL_CHECK_TRUE(PhaseOver());
+            return lowest_bid_;
+        }
     private:
         Player current_player_ = 0;
         int lowest_bid_ = 4;

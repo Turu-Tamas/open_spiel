@@ -15,6 +15,7 @@ namespace open_spiel {
 namespace hungarian_tarok {
     const Action kActionCallPartner = 0;
     const Action kActionCallSelf = 1;
+
     enum class AnnouncementType {
         kFourKings = 0,
         kTuletroa = 1,
@@ -26,6 +27,7 @@ namespace hungarian_tarok {
         kNineTaroks = 7,
     };
     const int kNumAnnouncementTypes = 8;
+
     struct AnnouncementAction {
         AnnouncementType type;
         enum class Level {
@@ -33,7 +35,7 @@ namespace hungarian_tarok {
             kContra = 1,
             kReContra = 2,
         } level;
-        
+
         static constexpr AnnouncementAction FromAction(Action action) {
             SPIEL_CHECK_GE(action, 0);
             SPIEL_CHECK_LT(action, kNumAnnouncementTypes * 3);

@@ -30,6 +30,7 @@
 
 #include "game_phase.h"
 #include "setup.h"
+#include "talon.h"
 
 namespace open_spiel {
 namespace hungarian_tarok {

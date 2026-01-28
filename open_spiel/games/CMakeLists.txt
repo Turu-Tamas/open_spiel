@@ -110,6 +110,8 @@ set(GAME_SOURCES
   hungarian_tarok/setup.h
   hungarian_tarok/announcements.h
   hungarian_tarok/announcements.cc
+  hungarian_tarok/card.h
+  hungarian_tarok/talon.h
   kriegspiel/kriegspiel.cc
   kriegspiel/kriegspiel.h
   kuhn_poker/kuhn_poker.cc

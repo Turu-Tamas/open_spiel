@@ -4,7 +4,6 @@
 
 namespace open_spiel {
 namespace hungarian_tarok {
-    typedef std::array<Player, kDeckSize> Deck;
     class SetupPhase : public GamePhase {
     public:
         SetupPhase() = default;
