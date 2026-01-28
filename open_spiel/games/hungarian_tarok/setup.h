@@ -14,7 +14,7 @@ namespace hungarian_tarok {
         }
         std::vector<Action> LegalActions() const override {
             std::vector<Action> actions;
-            for (int player = 0; player < 4; ++player) {
+            for (int player = 0; player < kNumPlayers; ++player) {
                 if (player_hands_sizes_[player] < 9) 
                     actions.push_back(player);
             }
@@ -42,7 +42,7 @@ namespace hungarian_tarok {
 
     private:
         Deck deck_;
-        std::array<int, 4> player_hands_sizes_;
+        std::array<int, kNumPlayers> player_hands_sizes_;
         Card current_card_ = 0;
     };
 } // namespace hungarian_tarok

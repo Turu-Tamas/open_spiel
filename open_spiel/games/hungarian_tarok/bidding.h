@@ -29,8 +29,8 @@ namespace hungarian_tarok {
         Player current_player_ = 0;
         int lowest_bid_ = 4;
         bool was_held_ = false;
-        std::array<bool, 4> has_passed_ = {false, false, false, false};
-        std::array<bool, 4> has_honour_ = {false, false, false, false};
+        std::array<bool, kNumPlayers> has_passed_ = {false, false, false, false};
+        std::array<bool, kNumPlayers> has_honour_ = {false, false, false, false};
         std::optional<Player> winning_bidder_ = std::nullopt;
 
         void NextPlayer();

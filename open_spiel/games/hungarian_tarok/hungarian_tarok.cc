@@ -44,14 +44,14 @@ const GameType kGameType{/*short_name=*/"hungarian_tarok",
                          GameType::Information::kPerfectInformation,
                          GameType::Utility::kGeneralSum,
                          GameType::RewardModel::kTerminal,
-                         /*max_num_players=*/4,
-                         /*min_num_players=*/2,
+                         /*max_num_players=*/kNumPlayers,
+                         /*min_num_players=*/kNumPlayers,
                          /*provides_information_state_string=*/false,
                          /*provides_information_state_tensor=*/false,
                          /*provides_observation_string=*/true,
                          /*provides_observation_tensor=*/true,
                          /*parameter_specification=*/
-                         {{"players", GameParameter(4)}}};
+                         {{"players", GameParameter(kNumPlayers)}}};
 
 std::shared_ptr<const Game> Factory(const GameParameters& params) {
   return std::shared_ptr<const Game>(new HungariantarokGame(params));

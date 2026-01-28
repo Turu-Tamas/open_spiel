@@ -49,13 +49,13 @@ namespace hungarian_tarok {
             } // else partner = std::nullopt
             partner_called_ = true;
             // next player is the player after declarer
-            current_player_ = (declarer_ + 1) % 4;
+            current_player_ = (declarer_ + 1) % kNumPlayers;
             last_to_speak_ = declarer_;
             return;
         }
 
         if (action == AnnouncementAction::PassAction()) {
-            current_player_ = (current_player_ + 1) % 4;
+            current_player_ = (current_player_ + 1) % kNumPlayers;
             if (current_player_ == last_to_speak_) {
                 current_player_ = kTerminalPlayerId; // end of phase
             }

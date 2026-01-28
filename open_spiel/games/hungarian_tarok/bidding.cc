@@ -16,9 +16,9 @@ namespace hungarian_tarok {
         return {kActionPass, kActionStandardBid};
     }
     void BiddingPhase::NextPlayer() {
-        Player next_player = (current_player_ + 1) % 4;
+        Player next_player = (current_player_ + 1) % kNumPlayers;
         while (has_passed_[next_player]) {
-            next_player = (next_player + 1) % 4;
+            next_player = (next_player + 1) % kNumPlayers;
         }
         if (next_player == winning_bidder_) {
             current_player_ = kTerminalPlayerId;

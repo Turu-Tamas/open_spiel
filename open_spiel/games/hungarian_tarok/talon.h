@@ -20,13 +20,13 @@ namespace hungarian_tarok {
 
             // distribute remaining talon cards to other players evenly, starting from the player after declarer
             int remaining_cards = kTalonSize - declarer_cards_to_take;
-            Player player = (declarer + 1) % 4;
+            Player player = (declarer + 1) % kNumPlayers;
             while (remaining_cards > 0) {
                 if (player != declarer) {
                     cards_to_take_[player]++;
                     remaining_cards--;
                 }
-                player = (player + 1) % 4;
+                player = (player + 1) % kNumPlayers;
             }
 
             int index = 0;
@@ -64,7 +64,7 @@ namespace hungarian_tarok {
             if (talon_taken_count_ == kTalonSize) {
                 current_player_ = kTerminalPlayerId;
             } else if (cards_to_take_[current_player_] == 0) {
-                current_player_ = (current_player_ + 1) % 4;
+                current_player_ = (current_player_ + 1) % kNumPlayers;
             }
         }
 
@@ -77,7 +77,7 @@ namespace hungarian_tarok {
         Player current_player_;
         std::array<Card, kTalonSize> talon_cards_;
         std::array<bool, kTalonSize> talon_taken_ = {false};
-        std::array<int, 4> cards_to_take_;
+        std::array<int, kNumPlayers> cards_to_take_;
         int talon_taken_count_ = 0;
     };
 } // namespace hungarian_tarok
