@@ -34,6 +34,7 @@
 #include "open_spiel/observer.h"
 #include "open_spiel/spiel.h"
 
+#include "card.h"
 #include "game_phase.h"
 
 namespace open_spiel {
@@ -74,9 +75,9 @@ class HungarianTarokGame : public Game {
  public:
   explicit HungarianTarokGame(const GameParameters& params);
 
-  int NumDistinctActions() const override { return 1; }
+  int NumDistinctActions() const override { return kDeckSize; }
   std::unique_ptr<State> NewInitialState() const override;
-  int MaxChanceOutcomes() const override { return 1; }
+  int MaxChanceOutcomes() const override { return kDeckSize; }
   int NumPlayers() const override;
   double MinUtility() const override { return -1000; }
   double MaxUtility() const override { return +1000; }

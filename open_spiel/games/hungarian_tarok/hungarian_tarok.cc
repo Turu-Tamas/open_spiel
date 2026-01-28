@@ -141,11 +141,11 @@ std::vector<Action> HungarianTarokState::LegalActions() const {
 }
 
 std::string HungarianTarokState::ActionToString(Player player, Action move) const {
-  return GetGame()->ActionToString(player, move);
+  return phase_->ActionToString(player, move);
 }
 
 std::string HungarianTarokState::ToString() const {
-  return "TODO";
+  return phase_->ToString();
 }
 
 bool HungarianTarokState::IsTerminal() const {
@@ -177,7 +177,7 @@ std::vector<std::pair<Action, double>> HungarianTarokState::ChanceOutcomes() con
   SPIEL_CHECK_TRUE(IsChanceNode());
   std::vector<std::pair<Action, double>> outcomes;
   std::vector<Action> legal_actions = LegalActions();
-  double prob = 1.0 / legal_actions.size();
+  double prob = 1.0 / static_cast<double>(legal_actions.size());
   for (Action action : legal_actions) {
     outcomes.push_back({action, prob});
   }

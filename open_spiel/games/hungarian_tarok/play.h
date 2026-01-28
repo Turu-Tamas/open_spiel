@@ -82,6 +82,14 @@ namespace hungarian_tarok {
         std::unique_ptr<GamePhase> Clone() const override {
             return std::make_unique<PlayPhase>(*this);
         }
+        std::string ActionToString(Player player, Action action) const override {
+            SPIEL_CHECK_GE(action, 0);
+            SPIEL_CHECK_LT(action, kDeckSize);
+            return absl::StrCat("Play card ", CardToString(static_cast<Card>(action)));
+        }
+        std::string ToString() const override {
+            return "Play Phase";
+        }
     private:
         Deck deck_;
         Player declarer_;

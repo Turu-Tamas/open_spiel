@@ -34,8 +34,8 @@ class GamePhase {
 
 	virtual bool GameOver() const { return false; }
 	virtual bool PhaseOver() const = 0;
-	// virtual std::string ActionToString(Player player, Action action) const = 0;
-	// virtual std::string ToString() const = 0;
+	virtual std::string ActionToString(Player player, Action action) const = 0;
+	virtual std::string ToString() const = 0;
 
 	// virtual std::string ObservationString(Player player) const = 0;
 	// virtual void ObservationTensor(Player player, absl::Span<float> values) const = 0;

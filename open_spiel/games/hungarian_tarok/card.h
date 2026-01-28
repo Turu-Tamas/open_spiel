@@ -56,6 +56,8 @@ namespace hungarian_tarok {
 
     std::ostream& operator<<(std::ostream& os, const Suit& suit);
     std::ostream& operator<<(std::ostream& os, const SuitRank& rank);
+
+    std::string CardToString(Card card);
 } // namespace hungarian_tarok
 } // namespace open_spiel
 

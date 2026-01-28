@@ -38,6 +38,10 @@ namespace hungarian_tarok {
         std::unique_ptr<GamePhase> Clone() const override {
             return std::make_unique<BiddingPhase>(*this);
         }
+        std::string ActionToString(Player player, Action action) const override;
+        std::string ToString() const override {
+            return "Bidding Phase";
+        }
     private:
         Player current_player_ = 0;
         int lowest_bid_ = 4;

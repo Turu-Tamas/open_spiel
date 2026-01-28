@@ -49,5 +49,18 @@ namespace hungarian_tarok {
         SPIEL_CHECK_TRUE(PhaseOver());
         return std::make_unique<DealTalonPhase>(deck_, *this);
     }
+    std::string BiddingPhase::ActionToString(Player player, Action action) const {
+        SPIEL_CHECK_FALSE(PhaseOver());
+        std::vector<Action> legal_actions = LegalActions();
+        SPIEL_CHECK_TRUE(std::find(legal_actions.begin(), legal_actions.end(), action) != legal_actions.end());
+        if (action == kActionPass) {
+            return "Pass";
+        } else if (action == kActionStandardBid) {
+            return was_held_ ? absl::StrCat("Bid ", lowest_bid_ - 1) :
+                              absl::StrCat("Bid hold ", lowest_bid_);
+        } else {
+            return "Unknown action";
+        }
+    }
 } // namespace hungarian_tarok
 } // namespace open_spiel

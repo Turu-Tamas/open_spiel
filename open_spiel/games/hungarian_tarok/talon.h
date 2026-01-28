@@ -33,6 +33,7 @@ namespace hungarian_tarok {
                 if (deck_[card] == kTalon)
                     talon_cards_[index++] = card;
             }
+            SPIEL_CHECK_EQ(index, kTalonSize);
         }
 
         Player CurrentPlayer() const override {
@@ -54,7 +55,7 @@ namespace hungarian_tarok {
             SPIEL_CHECK_LT(action, kTalonSize);
             SPIEL_CHECK_FALSE(talon_taken_[action]);
             SPIEL_CHECK_FALSE(PhaseOver());
-
+            std::cout << action << " " << cards_to_take_[current_player_] << " " << talon_cards_[action] << std::endl;
             talon_taken_[action] = true;
             deck_[talon_cards_[action]] = current_player_;
             talon_taken_count_++;
@@ -76,6 +77,14 @@ namespace hungarian_tarok {
         }
         std::unique_ptr<GamePhase> Clone() const override {
             return std::make_unique<DealTalonPhase>(*this);
+        }
+        std::string ActionToString(Player player, Action action) const override {
+            SPIEL_CHECK_GE(action, 0);
+            SPIEL_CHECK_LT(action, kTalonSize);
+            return absl::StrCat("Take talon card ", action);
+        }
+        std::string ToString() const override {
+            return "Dealing Talon Phase";
         }
     private:
         Deck deck_;
