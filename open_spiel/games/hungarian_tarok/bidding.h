@@ -1,12 +1,16 @@
 #ifndef OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_BIDDING_H_
 #define OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_BIDDING_H_
 
+#include <array>
+#include <optional>
+
+#include "card.h"
 #include "game_phase.h"
-#include "setup.h"
-#include "talon.h"
 
 namespace open_spiel {
 namespace hungarian_tarok {
+    class SetupPhase;
+
     const Action kActionPass = 0;
     const Action kActionStandardBid = 1;
 
@@ -30,10 +34,7 @@ namespace hungarian_tarok {
             SPIEL_CHECK_TRUE(PhaseOver());
             return lowest_bid_;
         }
-        std::unique_ptr<GamePhase> NextPhase() const override {
-            SPIEL_CHECK_TRUE(PhaseOver());
-            return std::make_unique<DealTalonPhase>(deck_, *this);
-        }
+        std::unique_ptr<GamePhase> NextPhase() const override;
         std::unique_ptr<GamePhase> Clone() const override {
             return std::make_unique<BiddingPhase>(*this);
         }

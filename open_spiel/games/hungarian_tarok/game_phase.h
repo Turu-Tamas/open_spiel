@@ -32,7 +32,7 @@ class GamePhase {
 
 	virtual void DoApplyAction(Action action) = 0;
 
-	virtual bool GameOver() const;
+	virtual bool GameOver() const { return false; }
 	virtual bool PhaseOver() const = 0;
 	// virtual std::string ActionToString(Player player, Action action) const = 0;
 	// virtual std::string ToString() const = 0;

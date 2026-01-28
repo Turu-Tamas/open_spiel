@@ -1,6 +1,8 @@
 #ifndef OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_CARD_H_
 #define OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_CARD_H_
 
+#include <array>
+
 #include "spiel_utils.h"
 
 namespace open_spiel {
@@ -44,34 +46,16 @@ namespace hungarian_tarok {
         return card < kNumTaroks ? Suit::kTarok
                : static_cast<Suit>((card - kNumTaroks) / kNumRanksPerSuit);
     }
-    constexpr bool CardBeats(Card a, Card b) {
-        SPIEL_CHECK_LT(a, kDeckSize);
-        SPIEL_CHECK_LT(b, kDeckSize);
-        
-        Suit suit_a = CardSuit(a);
-        Suit suit_b = CardSuit(b);
-        if (suit_a == Suit::kTarok && suit_b != Suit::kTarok) {
-            return true;
-        } else if (suit_a != Suit::kTarok && suit_b == Suit::kTarok) {
-            return false;
-        } else if (suit_a == Suit::kTarok && suit_b == Suit::kTarok) {
-            return a > b; // higher tarok wins
-        } else {
-            // both are suit cards
-            if (suit_a != suit_b) {
-                return false; // different suits, first does not win
-            } else {
-                return a > b; // higher rank wins
-            }
-        }
-    }
-
+    bool CardBeats(Card a, Card b);
     typedef std::array<Player, kDeckSize> Deck;
     const Player kTalon = -1;
     const Player kDeclarerSkart = -2;
     const Player kOpponentsSkart = -3;
     const Player kCurrentTrick = -4;
     constexpr Player WonCards(Player p) { return p + kNumPlayers; }
+
+    std::ostream& operator<<(std::ostream& os, const Suit& suit);
+    std::ostream& operator<<(std::ostream& os, const SuitRank& rank);
 } // namespace hungarian_tarok
 } // namespace open_spiel
 

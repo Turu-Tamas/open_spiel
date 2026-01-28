@@ -1,4 +1,6 @@
 #include "bidding.h"
+#include "setup.h"
+#include "talon.h"
 
 namespace open_spiel {
 namespace hungarian_tarok {
@@ -41,6 +43,11 @@ namespace hungarian_tarok {
             has_passed_[current_player_] = true;
         }
         NextPlayer();
+    }
+
+    std::unique_ptr<GamePhase> BiddingPhase::NextPhase() const {
+        SPIEL_CHECK_TRUE(PhaseOver());
+        return std::make_unique<DealTalonPhase>(deck_, *this);
     }
 } // namespace hungarian_tarok
 } // namespace open_spiel

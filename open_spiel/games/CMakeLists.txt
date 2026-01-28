@@ -111,6 +111,7 @@ set(GAME_SOURCES
   hungarian_tarok/announcements.h
   hungarian_tarok/announcements.cc
   hungarian_tarok/card.h
+  hungarian_tarok/card.cc
   hungarian_tarok/talon.h
   hungarian_tarok/skart.h
   hungarian_tarok/play.h

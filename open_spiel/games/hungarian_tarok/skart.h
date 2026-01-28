@@ -3,12 +3,13 @@
 
 #include "spiel.h"
 #include "game_phase.h"
-#include "setup.h"
-#include "bidding.h"
+#include "card.h"
 #include "announcements.h"
 
 namespace open_spiel {
 namespace hungarian_tarok {
+    const int kTalonSize = 6;
+
     class SkartPhase : public GamePhase {
     public:
         SkartPhase(Deck deck, Player declarer) : deck_(deck), declarer_(declarer) {}
@@ -42,9 +43,6 @@ namespace hungarian_tarok {
         }
         bool PhaseOver() const override {
             return cards_discarded_ == kTalonSize;
-        }
-        bool GameOver() const override {
-            return false;
         }
         std::unique_ptr<GamePhase> NextPhase() const override {
             SPIEL_CHECK_TRUE(PhaseOver());

@@ -3,13 +3,11 @@
 
 #include "spiel.h"
 #include "game_phase.h"
-#include "setup.h"
 #include "bidding.h"
 #include "skart.h"
 
 namespace open_spiel {
 namespace hungarian_tarok {
-    const int kTalonSize = 6;
     class DealTalonPhase : public GamePhase {
     public:
         DealTalonPhase(Deck deck, const BiddingPhase &bidding_phase) : deck_(deck), declarer_(bidding_phase.GetDeclarer()) {

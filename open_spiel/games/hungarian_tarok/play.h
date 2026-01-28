@@ -1,10 +1,11 @@
 #ifndef OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_PLAY_H_
 #define OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_PLAY_H_
 
+#include <algorithm>
+
 #include "spiel.h"
 #include "game_phase.h"
-#include "setup.h"
-#include "bidding.h"
+#include "card.h"
 
 namespace open_spiel {
 namespace hungarian_tarok {
@@ -34,9 +35,13 @@ namespace hungarian_tarok {
                 return actions;
 
             // no cards of the leading suit
-            bool has_tarok = std::any_of(deck_.begin(), deck_.end(), [&](Player p, Card c) {
-                return p == current_player_ && CardSuit(c) == Suit::kTarok;
-            });
+            bool has_tarok = false;
+            for (Card card = 0; card < kDeckSize; ++card) {
+                if (deck_[card] == current_player_ && CardSuit(card) == Suit::kTarok) {
+                    has_tarok = true;
+                    break;
+                }
+            }
             for (Card card = 0; card < kDeckSize; ++card) {
                 if (deck_[card] != current_player_)
                     continue;
@@ -78,7 +83,7 @@ namespace hungarian_tarok {
             return std::make_unique<PlayPhase>(*this);
         }
     private:
-        Deck &deck_;
+        Deck deck_;
         Player declarer_;
         Player current_player_ = 0;
         Player trick_caller_ = 0;

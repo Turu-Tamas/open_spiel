@@ -4,8 +4,6 @@
 #include "spiel.h"
 #include "game_phase.h"
 #include "card.h"
-#include "bidding.h"
-#include "setup.h"
 #include "play.h"
 
 #include <array>
@@ -78,9 +76,6 @@ namespace hungarian_tarok {
         void DoApplyAction(Action action) override;
         bool PhaseOver() const override {
             return current_player_ == kTerminalPlayerId;
-        }
-        bool GameOver() const override {
-            return false;
         }
         std::unique_ptr<GamePhase> NextPhase() const override {
             return std::make_unique<PlayPhase>(deck_, declarer_);

@@ -5,6 +5,10 @@
 #include "card.h"
 #include "spiel.h"
 #include "spiel_utils.h"
+#include "bidding.h"
+
+#include <memory>
+#include <array>
 
 namespace open_spiel {
 namespace hungarian_tarok {
@@ -33,9 +37,6 @@ namespace hungarian_tarok {
         }
         bool PhaseOver() const override {
             return current_card_ >= kDeckSize;
-        }
-        bool GameOver() const override {
-            return false;
         }
         const Deck &GetDeck() const {
             return deck_;
