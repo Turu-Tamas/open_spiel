@@ -97,7 +97,6 @@ class HungarianTarokObserver final : public Observer {
     auto phase_out = allocator->Get("phase", {1});
     // phase[0] == 1 once the initial chance action has happened.
     phase_out.at(0) = state.IsChanceNode() ? 0 : 1;
-
   }
 
   std::string StringFrom(const State& observed_state,
@@ -116,7 +115,7 @@ class HungarianTarokObserver final : public Observer {
 
 HungarianTarokState::HungarianTarokState(std::shared_ptr<const Game> game)
     : State(std::move(game)),
-  phase_(absl::make_unique<SetupPhase>(game_data_)) {}
+	  phase_(absl::make_unique<SetupPhase>()) {}
 
 HungarianTarokState::HungarianTarokState(const HungarianTarokState& other)
     : State(other),
@@ -217,7 +216,7 @@ std::string HungarianTarokGame::ActionToString(Player player, Action action) con
 int HungarianTarokGame::NumPlayers() const { return kNumPlayers; }
 
 int HungarianTarokGame::MaxGameLength() const {
-  return 150; // TODO
+  return 300; // TODO
 }
 
 }  // namespace hungarian_tarok

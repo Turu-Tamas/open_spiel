@@ -10,9 +10,10 @@ namespace open_spiel {
 namespace hungarian_tarok {
     class DealTalonPhase : public GamePhase {
     public:
-        DealTalonPhase(GameData &game_data) : GamePhase(game_data) {
-            Player declarer = game_data.declarer_;
-            int declarer_cards_to_take = game_data.winning_bid_;
+        explicit DealTalonPhase(std::unique_ptr<GameData> game_data)
+            : GamePhase(std::move(game_data)) {
+			Player declarer = this->game_data().declarer_;
+			int declarer_cards_to_take = this->game_data().winning_bid_;
             cards_to_take_ = {0, 0, 0, 0};
             cards_to_take_[declarer] = declarer_cards_to_take;
             current_player_ = declarer;
@@ -30,7 +31,7 @@ namespace hungarian_tarok {
 
             int index = 0;
             for (Card card = 0; card < kDeckSize; ++card) {
-                if (game_data_.deck_[card] == kTalon)
+				if (this->game_data().deck_[card] == kTalon)
                     talon_cards_[index++] = card;
             }
             SPIEL_CHECK_EQ(index, kTalonSize);
@@ -57,7 +58,7 @@ namespace hungarian_tarok {
             SPIEL_CHECK_FALSE(PhaseOver());
             std::cout << action << " " << cards_to_take_[current_player_] << " " << talon_cards_[action] << std::endl;
             talon_taken_[action] = true;
-            game_data_.deck_[talon_cards_[action]] = current_player_;
+            game_data().deck_[talon_cards_[action]] = current_player_;
             talon_taken_count_++;
             cards_to_take_[current_player_]--;
 
@@ -71,9 +72,9 @@ namespace hungarian_tarok {
         bool PhaseOver() const override {
             return current_player_ == kTerminalPlayerId;
         }
-        std::unique_ptr<GamePhase> NextPhase() const override {
+        std::unique_ptr<GamePhase> NextPhase() override {
             SPIEL_CHECK_TRUE(PhaseOver());
-            return std::make_unique<SkartPhase>(game_data_);
+            return std::make_unique<SkartPhase>(std::move(game_data_));
         }
         std::unique_ptr<GamePhase> Clone() const override {
             return std::make_unique<DealTalonPhase>(*this);

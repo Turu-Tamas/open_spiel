@@ -18,6 +18,8 @@ class HungarianTarokState;
 
 struct GameData {
 	Deck deck_;
+
+	// bidding results
 	Player declarer_;
 	int winning_bid_;
 	bool full_bid_; // wether all three honours bid
@@ -48,12 +50,31 @@ class GamePhase {
 
 	// virtual std::string ObservationString(Player player) const = 0;
 	// virtual void ObservationTensor(Player player, absl::Span<float> values) const = 0;
-	virtual std::unique_ptr<GamePhase> NextPhase() const = 0;
+	virtual std::unique_ptr<GamePhase> NextPhase() = 0;
 	virtual std::unique_ptr<GamePhase> Clone() const = 0;
 
  protected:
-	GamePhase( GameData &game_data) : game_data_(game_data) {}
-	GameData &game_data_;
+	explicit GamePhase(std::unique_ptr<GameData> game_data)
+	    : game_data_(std::move(game_data)) {}
+
+	GamePhase(const GamePhase& other)
+	    : game_data_(other.game_data_ ? std::make_unique<GameData>(*other.game_data_)
+	                                 : nullptr) {}
+	GamePhase& operator=(const GamePhase& other) {
+		if (this != &other) {
+			game_data_ = other.game_data_
+			                 ? std::make_unique<GameData>(*other.game_data_)
+			                 : nullptr;
+		}
+		return *this;
+	}
+	GamePhase(GamePhase&&) = default;
+	GamePhase& operator=(GamePhase&&) = default;
+
+	GameData& game_data() { return *game_data_; }
+	const GameData& game_data() const { return *game_data_; }
+
+	std::unique_ptr<GameData> game_data_;
 };
 
 }  // namespace hungarian_tarok

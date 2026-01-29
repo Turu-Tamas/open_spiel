@@ -13,7 +13,8 @@ namespace hungarian_tarok {
 
     class PlayPhase : public GamePhase {
     public:
-        PlayPhase(GameData &game_data) : GamePhase(game_data) {}
+        explicit PlayPhase(std::unique_ptr<GameData> game_data)
+            : GamePhase(std::move(game_data)) {}
         ~PlayPhase() override = default;
 
         Player CurrentPlayer() const override {
@@ -27,7 +28,7 @@ namespace hungarian_tarok {
                 return trick_cards_.empty() || CardSuit(trick_cards_.front()) == CardSuit(card);
             };
             for (Card card = 0; card < kDeckSize; ++card) {
-                if (game_data_.deck_[card] == current_player_ && can_play(card)) {
+                if (game_data().deck_[card] == current_player_ && can_play(card)) {
                     actions.push_back(card);
                 }
             }
@@ -37,13 +38,13 @@ namespace hungarian_tarok {
             // no cards of the leading suit
             bool has_tarok = false;
             for (Card card = 0; card < kDeckSize; ++card) {
-                if (game_data_.deck_[card] == current_player_ && CardSuit(card) == Suit::kTarok) {
+                if (game_data().deck_[card] == current_player_ && CardSuit(card) == Suit::kTarok) {
                     has_tarok = true;
                     break;
                 }
             }
             for (Card card = 0; card < kDeckSize; ++card) {
-                if (game_data_.deck_[card] != current_player_)
+                if (game_data().deck_[card] != current_player_)
                     continue;
                 // must play tarok if has one
                 if (!has_tarok || CardSuit(card) == Suit::kTarok) {
@@ -55,11 +56,11 @@ namespace hungarian_tarok {
         void DoApplyAction(Action action) override {
             SPIEL_CHECK_GE(action, 0);
             SPIEL_CHECK_LT(action, kDeckSize);
-            SPIEL_CHECK_EQ(game_data_.deck_[action], current_player_);
+            SPIEL_CHECK_EQ(game_data().deck_[action], current_player_);
             SPIEL_CHECK_FALSE(PhaseOver());
 
             // play the card
-            game_data_.deck_[action] = kCurrentTrick; // mark as played in round
+            game_data().deck_[action] = kCurrentTrick; // mark as played in round
             trick_cards_.push_back(action);
             if (trick_cards_.size() == kNumPlayers) {
                 // trick is complete
@@ -75,7 +76,7 @@ namespace hungarian_tarok {
         bool GameOver() const override {
             return PhaseOver();
         }
-        std::unique_ptr<GamePhase> NextPhase() const override {
+        std::unique_ptr<GamePhase> NextPhase() override {
             SPIEL_CHECK_TRUE(PhaseOver());
             return nullptr; // no next phase, game over
         }
@@ -89,7 +90,7 @@ namespace hungarian_tarok {
         }
         std::string ToString() const override {
             return absl::StrCat("Play Phase, round ", round_ + 1, " ", trick_cards_.size(), "/4 cards played" ,
-                                "\n", DeckToString(game_data_.deck_)); 
+                                "\n", DeckToString(game_data().deck_)); 
         }
     private:
         Player current_player_ = 0;
@@ -113,7 +114,7 @@ namespace hungarian_tarok {
             trick_caller_ = trick_winner;
             current_player_ = trick_winner;
             for (Card card : trick_cards_) {
-                game_data_.deck_[card] = WonCards(trick_winner);
+                game_data().deck_[card] = WonCards(trick_winner);
             }
             trick_cards_.clear();
 

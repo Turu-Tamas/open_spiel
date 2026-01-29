@@ -16,7 +16,7 @@ namespace hungarian_tarok {
 
     class BiddingPhase : public GamePhase {
     public:
-        BiddingPhase(GameData &game_data);
+		explicit BiddingPhase(std::unique_ptr<GameData> game_data);
         ~BiddingPhase() override = default;
         Player CurrentPlayer() const override {
             return current_player_;
@@ -29,7 +29,7 @@ namespace hungarian_tarok {
         bool GameOver() const override {
             return all_passed_;
         }
-        std::unique_ptr<GamePhase> NextPhase() const override;
+        std::unique_ptr<GamePhase> NextPhase() override;
         std::unique_ptr<GamePhase> Clone() const override {
             return std::make_unique<BiddingPhase>(*this);
         }

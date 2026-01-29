@@ -17,8 +17,8 @@ namespace hungarian_tarok {
 
     class SetupPhase : public GamePhase {
     public:
-        SetupPhase(GameData &game_data) : GamePhase(game_data) {
-            game_data.deck_.fill(kTalon); // all cards not dealt stay in the talon
+        SetupPhase() : GamePhase(std::make_unique<GameData>()) {
+            game_data().deck_.fill(kTalon); // all cards not dealt stay in the talon
             player_hands_sizes_.fill(0);
         }
         ~SetupPhase() override = default;
@@ -39,16 +39,16 @@ namespace hungarian_tarok {
             SPIEL_CHECK_LT(action, kNumPlayers);
             SPIEL_CHECK_FALSE(PhaseOver());
             // Action is the player ID who receives the next card.
-            game_data_.deck_[current_card_] = action;
+            game_data().deck_[current_card_] = action;
             player_hands_sizes_[action]++;
             current_card_++;
         }
         bool PhaseOver() const override {
             return current_card_ >= kPlayerHandSize * kNumPlayers;
         }
-        std::unique_ptr<GamePhase> NextPhase() const override {
+        std::unique_ptr<GamePhase> NextPhase() override {
             SPIEL_CHECK_TRUE(PhaseOver());
-            return std::make_unique<BiddingPhase>(game_data_);
+            return std::make_unique<BiddingPhase>(std::move(game_data_));
         }
         std::unique_ptr<GamePhase> Clone() const override {
             return std::make_unique<SetupPhase>(*this);
