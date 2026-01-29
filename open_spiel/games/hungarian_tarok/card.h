@@ -53,6 +53,7 @@ namespace hungarian_tarok {
     const Player kOpponentsSkart = -3;
     const Player kCurrentTrick = -4;
     constexpr Player WonCards(Player p) { return p + kNumPlayers; }
+    std::string DeckToString(const Deck &deck);
 
     std::ostream& operator<<(std::ostream& os, const Suit& suit);
     std::ostream& operator<<(std::ostream& os, const SuitRank& rank);

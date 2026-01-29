@@ -88,7 +88,8 @@ namespace hungarian_tarok {
             return absl::StrCat("Play card ", CardToString(static_cast<Card>(action)));
         }
         std::string ToString() const override {
-            return "Play Phase";
+            return absl::StrCat("Play Phase, round ", round_ + 1, " ", trick_cards_.size(), "/4 cards played" ,
+                                "\n", DeckToString(deck_)); 
         }
     private:
         Deck deck_;

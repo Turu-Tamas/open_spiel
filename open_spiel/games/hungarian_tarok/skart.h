@@ -12,7 +12,16 @@ namespace hungarian_tarok {
 
     class SkartPhase : public GamePhase {
     public:
-        SkartPhase(Deck deck, Player declarer) : deck_(deck), declarer_(declarer) {}
+        SkartPhase(Deck deck, Player declarer) : deck_(deck), declarer_(declarer) {
+            hand_sizes_.fill(0);
+            for (Card card = 0; card < kDeckSize; ++card) {
+                Player owner = deck_[card];
+                if (owner >= 0 && owner < kNumPlayers) {
+                    hand_sizes_[owner]++;
+                }
+            }
+            current_player_ = declarer_;
+        }
         ~SkartPhase() override = default;
 
         Player CurrentPlayer() const override {
@@ -40,6 +49,14 @@ namespace hungarian_tarok {
                 deck_[action] = kOpponentsSkart;
             }
             cards_discarded_++;
+
+            hand_sizes_[current_player_]--;
+            if (hand_sizes_[current_player_] == kPlayerHandSize) {
+                current_player_ = (current_player_ + 1) % kNumPlayers;
+                if (hand_sizes_[current_player_] == 0) {
+                    current_player_ = kTerminalPlayerId;
+                }
+            }
         }
         bool PhaseOver() const override {
             return cards_discarded_ == kTalonSize;
@@ -57,12 +74,14 @@ namespace hungarian_tarok {
             return absl::StrCat("Discard card ", CardToString(static_cast<Card>(action)));
         }
         std::string ToString() const override {
-            return "Skart Phase";
+            return absl::StrCat("Skart Phase, ", cards_discarded_, "/6 cards discarded" ,
+                                "\n", DeckToString(deck_));
         }
     private:
         Deck deck_;
         Player declarer_;
         Player current_player_ = 0;
+        std::array<int , kNumPlayers> hand_sizes_;
         int cards_discarded_ = 0;
     };
 } // namespace hungarian_tarok

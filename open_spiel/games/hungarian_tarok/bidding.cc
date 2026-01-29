@@ -18,11 +18,17 @@ namespace hungarian_tarok {
     }
     void BiddingPhase::NextPlayer() {
         Player next_player = (current_player_ + 1) % kNumPlayers;
-        while (has_passed_[next_player]) {
+        while (has_passed_[next_player] && next_player != current_player_) {
             next_player = (next_player + 1) % kNumPlayers;
         }
         if (next_player == winning_bidder_) {
             current_player_ = kTerminalPlayerId;
+            return;
+        }
+        if (next_player == current_player_) {
+            // everyone passed
+            current_player_ = kTerminalPlayerId;
+            all_passed_ = true;
             return;
         }
         current_player_ = next_player;
@@ -31,14 +37,17 @@ namespace hungarian_tarok {
         SPIEL_CHECK_FALSE(PhaseOver());
         std::vector<Action> legal_actions = LegalActions();
         SPIEL_CHECK_TRUE(std::find(legal_actions.begin(), legal_actions.end(), action) != legal_actions.end());
+
         if (action == kActionStandardBid) {
-            if (!was_held_) {
+            // no holding as first bid
+            if (!was_held_ && !has_bid_[current_player_]) {
                 was_held_ = true;
             } else {
                 lowest_bid_ -= 1;
                 was_held_ = false;
             }
             winning_bidder_ = current_player_;
+            has_bid_[current_player_] = true;
         } else if (action == kActionPass) {
             has_passed_[current_player_] = true;
         }

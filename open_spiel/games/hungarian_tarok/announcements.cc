@@ -23,18 +23,18 @@ namespace hungarian_tarok {
                 actions.push_back(AnnouncementAction::AnnounceAction(type));
             }
         }
-        for (int i = 0; i < kNumAnnouncementTypes; ++i) {
-            AnnouncementType type = static_cast<AnnouncementType>(i);
-            if (other_side.announced[i] && other_side.contra_level[i] % 2 == 0) { // contra only if other side announced and not contra'd yet (or re-contra'd)
-                actions.push_back(AnnouncementAction::ContraAction(type));
-            }
-        }
-        for (int i = 0; i < kNumAnnouncementTypes; ++i) {
-            AnnouncementType type = static_cast<AnnouncementType>(i);
-            if (current_side.contra_level[i] % 2 == 1) { // re-contra only if contra'd already (or re-contra subcontra'd)
-                actions.push_back(AnnouncementAction::ReContraAction(type));
-            }
-        }
+        // for (int i = 0; i < kNumAnnouncementTypes; ++i) {
+        //     AnnouncementType type = static_cast<AnnouncementType>(i);
+        //     if (other_side.announced[i] && other_side.contra_level[i] % 2 == 0) { // contra only if other side announced and not contra'd yet (or re-contra'd)
+        //         actions.push_back(AnnouncementAction::ContraAction(type));
+        //     }
+        // }
+        // for (int i = 0; i < kNumAnnouncementTypes; ++i) {
+        //     AnnouncementType type = static_cast<AnnouncementType>(i);
+        //     if (current_side.contra_level[i] % 2 == 1) { // re-contra only if contra'd already (or re-contra subcontra'd)
+        //         actions.push_back(AnnouncementAction::ReContraAction(type));
+        //     }
+        // }
         actions.push_back(AnnouncementAction::PassAction());
         return actions;
     }

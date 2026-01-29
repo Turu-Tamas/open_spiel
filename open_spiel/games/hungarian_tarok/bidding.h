@@ -26,6 +26,9 @@ namespace hungarian_tarok {
         bool PhaseOver() const override {
             return current_player_ == kTerminalPlayerId;
         }
+        bool GameOver() const override {
+            return all_passed_;
+        }
         Player GetDeclarer() const {
             SPIEL_CHECK_TRUE(PhaseOver());
             return winning_bidder_.value();
@@ -46,9 +49,11 @@ namespace hungarian_tarok {
         Player current_player_ = 0;
         int lowest_bid_ = 4;
         bool was_held_ = false;
+        bool all_passed_ = false;
         Deck deck_;
         std::array<bool, kNumPlayers> has_passed_ = {false, false, false, false};
         std::array<bool, kNumPlayers> has_honour_ = {false, false, false, false};
+        std::array<bool, kNumPlayers> has_bid_ = {false, false, false, false};
         std::optional<Player> winning_bidder_ = std::nullopt;
 
         void NextPlayer();
