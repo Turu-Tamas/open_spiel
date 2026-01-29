@@ -9,10 +9,19 @@
 #include "open_spiel/abseil-cpp/absl/types/span.h"
 #include "open_spiel/spiel.h"
 
+#include "card.h"
+
 namespace open_spiel {
 namespace hungarian_tarok {
 
 class HungarianTarokState;
+
+struct GameData {
+	Deck deck_;
+	Player declarer_;
+	int winning_bid_;
+	bool full_bid_; // wether all three honours bid
+};
 
 // Abstract interface for a single phase of Hungarian Tarok.
 //
@@ -41,6 +50,10 @@ class GamePhase {
 	// virtual void ObservationTensor(Player player, absl::Span<float> values) const = 0;
 	virtual std::unique_ptr<GamePhase> NextPhase() const = 0;
 	virtual std::unique_ptr<GamePhase> Clone() const = 0;
+
+ protected:
+	GamePhase( GameData &game_data) : game_data_(game_data) {}
+	GameData &game_data_;
 };
 
 }  // namespace hungarian_tarok

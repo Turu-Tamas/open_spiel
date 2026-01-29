@@ -66,15 +66,12 @@ namespace hungarian_tarok {
     class AnnouncementsPhase : public GamePhase {
     public:
         // a full bid is when all three honours bid
-        AnnouncementsPhase(Player declarer, Deck deck, bool full_bid)
-            : current_player_(declarer),
-              deck_(deck),
-              declarer_(declarer),
-              full_bid_(full_bid) {
+        AnnouncementsPhase(GameData &game_data)
+            : GamePhase(game_data), current_player_(game_data.declarer_) {
             tarok_counts_.fill(0);
             for (Card card = 0; card < kDeckSize; ++card) {
                 if (CardSuit(card) == Suit::kTarok) {
-                    Player owner = deck_[card];
+                    Player owner = game_data_.deck_[card];
                     if (owner >= 0 && owner < kNumPlayers) {
                         tarok_counts_[owner]++;
                     }
@@ -91,7 +88,7 @@ namespace hungarian_tarok {
             return current_player_ == kTerminalPlayerId;
         }
         std::unique_ptr<GamePhase> NextPhase() const override {
-            return std::make_unique<PlayPhase>(deck_, declarer_);
+            return std::make_unique<PlayPhase>(game_data_);
         }
         std::unique_ptr<GamePhase> Clone() const override {
             return std::make_unique<AnnouncementsPhase>(*this);
@@ -102,7 +99,6 @@ namespace hungarian_tarok {
         }
     private:
         Player current_player_ = 0;
-        Deck deck_;
 
         struct Side {
             std::array<bool, kNumAnnouncementTypes> announced = {false};
@@ -112,29 +108,27 @@ namespace hungarian_tarok {
         Side opponents_side_;
         bool partner_called_ = false;
         std::optional<Player> partner_;
-        Player declarer_;
         Player last_to_speak_;
         bool first_round_ = true;
-        bool full_bid_; // whether all three honours bid
         std::array<int, kNumPlayers> tarok_counts_;
 
         Side &CurrentSide() {
-            return (current_player_ == declarer_ || (partner_ && current_player_ == *partner_))
+            return (current_player_ == game_data_.declarer_ || (partner_ && current_player_ == *partner_))
                        ? declarer_side_
                        : opponents_side_;
         }
         Side &/*take it on the*/OtherSide() {
-            return (current_player_ == declarer_ || (partner_ && current_player_ == *partner_))
+            return (current_player_ == game_data_.declarer_ || (partner_ && current_player_ == *partner_))
                        ? opponents_side_
                        : declarer_side_;
         }
         const Side &CurrentSide() const {
-            return (current_player_ == declarer_ || (partner_ && current_player_ == *partner_))
+            return (current_player_ == game_data_.declarer_ || (partner_ && current_player_ == *partner_))
                        ? declarer_side_
                        : opponents_side_;
         }
         const Side &OtherSide() const {
-            return (current_player_ == declarer_ || (partner_ && current_player_ == *partner_))
+            return (current_player_ == game_data_.declarer_ || (partner_ && current_player_ == *partner_))
                        ? opponents_side_
                        : declarer_side_;
         }

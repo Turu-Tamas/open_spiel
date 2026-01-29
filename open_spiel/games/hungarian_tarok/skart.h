@@ -12,15 +12,15 @@ namespace hungarian_tarok {
 
     class SkartPhase : public GamePhase {
     public:
-        SkartPhase(Deck deck, Player declarer) : deck_(deck), declarer_(declarer) {
+        SkartPhase(GameData &game_data) : GamePhase(game_data) {
             hand_sizes_.fill(0);
             for (Card card = 0; card < kDeckSize; ++card) {
-                Player owner = deck_[card];
+                Player owner = game_data_.deck_[card];
                 if (owner >= 0 && owner < kNumPlayers) {
                     hand_sizes_[owner]++;
                 }
             }
-            current_player_ = declarer_;
+            current_player_ = game_data_.declarer_;
         }
         ~SkartPhase() override = default;
 
@@ -31,7 +31,7 @@ namespace hungarian_tarok {
             SPIEL_CHECK_FALSE(PhaseOver());
             std::vector<Action> actions;
             for (Card card = 0; card < kDeckSize; ++card) {
-                if (deck_[card] == current_player_) {
+                if (game_data_.deck_[card] == current_player_) {
                     actions.push_back(card);
                 }
             }
@@ -40,13 +40,13 @@ namespace hungarian_tarok {
         void DoApplyAction(Action action) override {
             SPIEL_CHECK_GE(action, 0);
             SPIEL_CHECK_LT(action, kDeckSize);
-            SPIEL_CHECK_EQ(deck_[action], current_player_);
+            SPIEL_CHECK_EQ(game_data_.deck_[action], current_player_);
             SPIEL_CHECK_FALSE(PhaseOver());
 
-            if (current_player_ == declarer_) {
-                deck_[action] = kDeclarerSkart;
+            if (current_player_ == game_data_.declarer_) {
+                game_data_.deck_[action] = kDeclarerSkart;
             } else {
-                deck_[action] = kOpponentsSkart;
+                game_data_.deck_[action] = kOpponentsSkart;
             }
             cards_discarded_++;
 
@@ -63,7 +63,7 @@ namespace hungarian_tarok {
         }
         std::unique_ptr<GamePhase> NextPhase() const override {
             SPIEL_CHECK_TRUE(PhaseOver());
-            return std::make_unique<AnnouncementsPhase>(declarer_, deck_);
+            return std::make_unique<AnnouncementsPhase>(game_data_);
         }
         std::unique_ptr<GamePhase> Clone() const override {
             return std::make_unique<SkartPhase>(*this);
@@ -75,11 +75,9 @@ namespace hungarian_tarok {
         }
         std::string ToString() const override {
             return absl::StrCat("Skart Phase, ", cards_discarded_, "/6 cards discarded" ,
-                                "\n", DeckToString(deck_));
+                                "\n", DeckToString(game_data_.deck_));
         }
     private:
-        Deck deck_;
-        Player declarer_;
         Player current_player_ = 0;
         std::array<int , kNumPlayers> hand_sizes_;
         int cards_discarded_ = 0;

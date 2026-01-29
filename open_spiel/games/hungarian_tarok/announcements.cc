@@ -7,26 +7,26 @@ namespace hungarian_tarok {
         if (CurrentSide().announced[static_cast<int>(AnnouncementType::kTuletroa)]) {
             return false; // already announced
         }
-        if (full_bid_ && current_player_ == declarer_ && first_round_) {
+        if (game_data_.full_bid_ && current_player_ == game_data_.declarer_ && first_round_) {
             // in full bid in the first round tuletroa from declarer means skiz in hand
-            return deck_[kSkiz] == declarer_;
+            return game_data_.deck_[kSkiz] == game_data_.declarer_;
         }
-        if (current_player_ == declarer_ && first_round_) {
+        if (current_player_ == game_data_.declarer_ && first_round_) {
             // in the first round, tuletroa from declarer means XXI and Skiz in hand
-            return deck_[kXXI] == declarer_ &&
-                   deck_[kSkiz] == declarer_;
+            return game_data_.deck_[kXXI] == game_data_.declarer_ &&
+                   game_data_.deck_[kSkiz] == game_data_.declarer_;
         }
         if (current_player_ == partner_ && first_round_) {
             // in the first round, tuletroa from partner means XXI or Skiz in hand
-            return deck_[kXXI] == *partner_ ||
-                   deck_[kSkiz] == *partner_;
+            return game_data_.deck_[kXXI] == *partner_ ||
+                   game_data_.deck_[kSkiz] == *partner_;
         }
         return true;
     }
     std::vector<Action> AnnouncementsPhase::LegalActions() const {
         SPIEL_CHECK_FALSE(PhaseOver());
         if (!partner_called_) {
-            if (deck_[MakeTarok(20)] == declarer_) {
+            if (game_data_.deck_[MakeTarok(20)] == game_data_.declarer_) {
                 // declarer can call self with XX
                 return {kActionCallPartner, kActionCallSelf};
             }
@@ -84,15 +84,15 @@ namespace hungarian_tarok {
     void AnnouncementsPhase::DoApplyAction(Action action) {
         SPIEL_CHECK_FALSE(PhaseOver());
         std::vector<Action> legal_actions = LegalActions();
-        SPIEL_CHECK_TRUE(std::find(legal_actions.begin(), legal_actions.end(), action) != legal_actions.end());
+        SPIEL_CHECK_TRUE(absl::c_find(legal_actions, action) != legal_actions.end());
 
         if (!partner_called_) {
             if (action == kActionCallPartner) {
                 // call highest tarok not in declarer's hand
                 for (int rank = 20; rank >= 1; --rank) {
                     Card card = MakeTarok(rank);
-                    if (deck_[card] != declarer_) {
-                        partner_ = deck_[card];
+                    if (game_data_.deck_[card] != game_data_.declarer_) {
+                        partner_ = game_data_.deck_[card];
                         break;
                     }
                 }
@@ -100,8 +100,8 @@ namespace hungarian_tarok {
             } // else partner = std::nullopt
             partner_called_ = true;
             // next player is the player after declarer
-            current_player_ = (declarer_ + 1) % kNumPlayers;
-            last_to_speak_ = declarer_;
+            current_player_ = (game_data_.declarer_ + 1) % kNumPlayers;
+            last_to_speak_ = game_data_.declarer_;
             return;
         }
 
@@ -110,7 +110,7 @@ namespace hungarian_tarok {
             if (current_player_ == last_to_speak_) {
                 current_player_ = kTerminalPlayerId; // end of phase
             }
-            if (current_player_ == declarer_) {
+            if (current_player_ == game_data_.declarer_) {
                 first_round_ = false;
             }
             return;
@@ -136,7 +136,7 @@ namespace hungarian_tarok {
     std::string AnnouncementsPhase::ActionToString(Player player, Action action) const {
         SPIEL_CHECK_FALSE(PhaseOver());
         std::vector<Action> legal_actions = LegalActions();
-        SPIEL_CHECK_TRUE(std::find(legal_actions.begin(), legal_actions.end(), action) != legal_actions.end());
+        SPIEL_CHECK_TRUE(absl::c_find(legal_actions, action) != legal_actions.end());
         if (!partner_called_) {
             if (action == kActionCallPartner) {
                 return "Call partner";

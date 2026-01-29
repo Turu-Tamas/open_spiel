@@ -116,7 +116,7 @@ class HungarianTarokObserver final : public Observer {
 
 HungarianTarokState::HungarianTarokState(std::shared_ptr<const Game> game)
     : State(std::move(game)),
-  phase_(absl::make_unique<SetupPhase>()) {}
+  phase_(absl::make_unique<SetupPhase>(game_data_)) {}
 
 HungarianTarokState::HungarianTarokState(const HungarianTarokState& other)
     : State(other),

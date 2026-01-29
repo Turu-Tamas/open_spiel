@@ -69,6 +69,7 @@ class HungarianTarokState : public State {
 
  private:
   std::unique_ptr<GamePhase> phase_;
+  GameData game_data_;
 };
 
 class HungarianTarokGame : public Game {

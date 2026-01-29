@@ -10,9 +10,9 @@ namespace open_spiel {
 namespace hungarian_tarok {
     class DealTalonPhase : public GamePhase {
     public:
-        DealTalonPhase(Deck deck, const BiddingPhase &bidding_phase) : deck_(deck), declarer_(bidding_phase.GetDeclarer()) {
-            Player declarer = bidding_phase.GetDeclarer();
-            int declarer_cards_to_take = bidding_phase.GetWinningBid();
+        DealTalonPhase(GameData &game_data) : GamePhase(game_data) {
+            Player declarer = game_data.declarer_;
+            int declarer_cards_to_take = game_data.winning_bid_;
             cards_to_take_ = {0, 0, 0, 0};
             cards_to_take_[declarer] = declarer_cards_to_take;
             current_player_ = declarer;
@@ -30,7 +30,7 @@ namespace hungarian_tarok {
 
             int index = 0;
             for (Card card = 0; card < kDeckSize; ++card) {
-                if (deck_[card] == kTalon)
+                if (game_data_.deck_[card] == kTalon)
                     talon_cards_[index++] = card;
             }
             SPIEL_CHECK_EQ(index, kTalonSize);
@@ -57,7 +57,7 @@ namespace hungarian_tarok {
             SPIEL_CHECK_FALSE(PhaseOver());
             std::cout << action << " " << cards_to_take_[current_player_] << " " << talon_cards_[action] << std::endl;
             talon_taken_[action] = true;
-            deck_[talon_cards_[action]] = current_player_;
+            game_data_.deck_[talon_cards_[action]] = current_player_;
             talon_taken_count_++;
             cards_to_take_[current_player_]--;
 
@@ -73,7 +73,7 @@ namespace hungarian_tarok {
         }
         std::unique_ptr<GamePhase> NextPhase() const override {
             SPIEL_CHECK_TRUE(PhaseOver());
-            return std::make_unique<SkartPhase>(deck_, declarer_);
+            return std::make_unique<SkartPhase>(game_data_);
         }
         std::unique_ptr<GamePhase> Clone() const override {
             return std::make_unique<DealTalonPhase>(*this);
@@ -87,13 +87,11 @@ namespace hungarian_tarok {
             return "Dealing Talon Phase";
         }
     private:
-        Deck deck_;
         Player current_player_;
         std::array<Card, kTalonSize> talon_cards_;
         std::array<bool, kTalonSize> talon_taken_ = {false};
         std::array<int, kNumPlayers> cards_to_take_;
         int talon_taken_count_ = 0;
-        Player declarer_;
     };
 } // namespace hungarian_tarok
 } // namespace open_spiel

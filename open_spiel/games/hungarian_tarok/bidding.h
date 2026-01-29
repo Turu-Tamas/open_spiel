@@ -16,7 +16,7 @@ namespace hungarian_tarok {
 
     class BiddingPhase : public GamePhase {
     public:
-        BiddingPhase(const SetupPhase &setup_phase);
+        BiddingPhase(GameData &game_data);
         ~BiddingPhase() override = default;
         Player CurrentPlayer() const override {
             return current_player_;
@@ -28,14 +28,6 @@ namespace hungarian_tarok {
         }
         bool GameOver() const override {
             return all_passed_;
-        }
-        Player GetDeclarer() const {
-            SPIEL_CHECK_TRUE(PhaseOver());
-            return winning_bidder_.value();
-        }
-        int GetWinningBid() const {
-            SPIEL_CHECK_TRUE(PhaseOver());
-            return lowest_bid_;
         }
         std::unique_ptr<GamePhase> NextPhase() const override;
         std::unique_ptr<GamePhase> Clone() const override {
@@ -50,11 +42,9 @@ namespace hungarian_tarok {
         int lowest_bid_ = 4;
         bool was_held_ = false;
         bool all_passed_ = false;
-        Deck deck_;
         std::array<bool, kNumPlayers> has_passed_ = {false, false, false, false};
         std::array<bool, kNumPlayers> has_honour_ = {false, false, false, false};
         std::array<bool, kNumPlayers> has_bid_ = {false, false, false, false};
-        std::optional<Player> winning_bidder_ = std::nullopt;
 
         void NextPlayer();
     };
