@@ -3,6 +3,26 @@
 
 namespace open_spiel {
 namespace hungarian_tarok {
+    bool AnnouncementsPhase::CanAnnounceTuletroa() const {
+        if (CurrentSide().announced[static_cast<int>(AnnouncementType::kTuletroa)]) {
+            return false; // already announced
+        }
+        if (full_bid_ && current_player_ == declarer_ && first_round_) {
+            // in full bid in the first round tuletroa from declarer means skiz in hand
+            return deck_[kSkiz] == declarer_;
+        }
+        if (current_player_ == declarer_ && first_round_) {
+            // in the first round, tuletroa from declarer means XXI and Skiz in hand
+            return deck_[kXXI] == declarer_ &&
+                   deck_[kSkiz] == declarer_;
+        }
+        if (current_player_ == partner_ && first_round_) {
+            // in the first round, tuletroa from partner means XXI or Skiz in hand
+            return deck_[kXXI] == *partner_ ||
+                   deck_[kSkiz] == *partner_;
+        }
+        return true;
+    }
     std::vector<Action> AnnouncementsPhase::LegalActions() const {
         SPIEL_CHECK_FALSE(PhaseOver());
         if (!partner_called_) {
@@ -19,22 +39,44 @@ namespace hungarian_tarok {
         // separate loops so actions are sorted
         for (int i = 0; i < kNumAnnouncementTypes; ++i) {
             AnnouncementType type = static_cast<AnnouncementType>(i);
-            if (!current_side.announced[i]) { // announce only if not announced yet
-                actions.push_back(AnnouncementAction::AnnounceAction(type));
+            if (current_side.announced[i])
+                continue;
+
+            switch (type) {
+                case AnnouncementType::kTuletroa:
+                    if (CanAnnounceTuletroa())
+                        actions.push_back(AnnouncementAction::AnnounceAction(type));
+                    break;
+                case AnnouncementType::kEightTaroks:
+                    if (tarok_counts_[current_player_] == 8)
+                        actions.push_back(AnnouncementAction::AnnounceAction(type));
+                    break;
+                case AnnouncementType::kNineTaroks:
+                    if (tarok_counts_[current_player_] == 9)
+                        actions.push_back(AnnouncementAction::AnnounceAction(type));
+                    break;
+                default:
+                    actions.push_back(AnnouncementAction::AnnounceAction(type));
             }
         }
-        // for (int i = 0; i < kNumAnnouncementTypes; ++i) {
-        //     AnnouncementType type = static_cast<AnnouncementType>(i);
-        //     if (other_side.announced[i] && other_side.contra_level[i] % 2 == 0) { // contra only if other side announced and not contra'd yet (or re-contra'd)
-        //         actions.push_back(AnnouncementAction::ContraAction(type));
-        //     }
-        // }
-        // for (int i = 0; i < kNumAnnouncementTypes; ++i) {
-        //     AnnouncementType type = static_cast<AnnouncementType>(i);
-        //     if (current_side.contra_level[i] % 2 == 1) { // re-contra only if contra'd already (or re-contra subcontra'd)
-        //         actions.push_back(AnnouncementAction::ReContraAction(type));
-        //     }
-        // }
+
+        for (int i = 0; i < kNumAnnouncementTypes; ++i) {
+            AnnouncementType type = static_cast<AnnouncementType>(i);
+            // contra only if other side announced and not contra'd yet (or re-contra'd)
+            if (other_side.announced[i]
+                && other_side.contra_level[i] % 2 == 0
+                && other_side.contra_level[i] <= kMaxContraLevel) {
+                actions.push_back(AnnouncementAction::ContraAction(type));
+            }
+        }
+
+        for (int i = 0; i < kNumAnnouncementTypes; ++i) {
+            AnnouncementType type = static_cast<AnnouncementType>(i);
+            // re-contra only if contra'd already (or re-contra subcontra'd)
+            if (current_side.contra_level[i] % 2 == 1 && current_side.contra_level[i] <= kMaxContraLevel) {
+                actions.push_back(AnnouncementAction::ReContraAction(type));
+            }
+        }
         actions.push_back(AnnouncementAction::PassAction());
         return actions;
     }
@@ -43,6 +85,7 @@ namespace hungarian_tarok {
         SPIEL_CHECK_FALSE(PhaseOver());
         std::vector<Action> legal_actions = LegalActions();
         SPIEL_CHECK_TRUE(std::find(legal_actions.begin(), legal_actions.end(), action) != legal_actions.end());
+
         if (!partner_called_) {
             if (action == kActionCallPartner) {
                 // call highest tarok not in declarer's hand
@@ -66,6 +109,9 @@ namespace hungarian_tarok {
             current_player_ = (current_player_ + 1) % kNumPlayers;
             if (current_player_ == last_to_speak_) {
                 current_player_ = kTerminalPlayerId; // end of phase
+            }
+            if (current_player_ == declarer_) {
+                first_round_ = false;
             }
             return;
         }

@@ -56,7 +56,9 @@ namespace hungarian_tarok {
 
     std::unique_ptr<GamePhase> BiddingPhase::NextPhase() const {
         SPIEL_CHECK_TRUE(PhaseOver());
-        return std::make_unique<DealTalonPhase>(deck_, *this);
+        int bidder_count = std::count(has_bid_.begin(), has_bid_.end(), true);
+        bool full_bid = (bidder_count == 3); // all three honours bid
+        return std::make_unique<DealTalonPhase>(deck_, *this, full_bid);
     }
     std::string BiddingPhase::ActionToString(Player player, Action action) const {
         SPIEL_CHECK_FALSE(PhaseOver());

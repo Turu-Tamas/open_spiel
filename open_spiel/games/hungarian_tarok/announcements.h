@@ -16,6 +16,8 @@ namespace hungarian_tarok {
     const Action kActionCallPartner = 0;
     const Action kActionCallSelf = 1;
 
+    const int kMaxContraLevel = 5;
+
     enum class AnnouncementType {
         kFourKings = 0,
         kTuletroa = 1,
@@ -63,10 +65,21 @@ namespace hungarian_tarok {
 
     class AnnouncementsPhase : public GamePhase {
     public:
-        AnnouncementsPhase(Player declarer, Deck deck)
+        // a full bid is when all three honours bid
+        AnnouncementsPhase(Player declarer, Deck deck, bool full_bid)
             : current_player_(declarer),
               deck_(deck),
-              declarer_(declarer) {
+              declarer_(declarer),
+              full_bid_(full_bid) {
+            tarok_counts_.fill(0);
+            for (Card card = 0; card < kDeckSize; ++card) {
+                if (CardSuit(card) == Suit::kTarok) {
+                    Player owner = deck_[card];
+                    if (owner >= 0 && owner < kNumPlayers) {
+                        tarok_counts_[owner]++;
+                    }
+                }
+            }
         }
         ~AnnouncementsPhase() override = default;
         Player CurrentPlayer() const override {
@@ -101,6 +114,9 @@ namespace hungarian_tarok {
         std::optional<Player> partner_;
         Player declarer_;
         Player last_to_speak_;
+        bool first_round_ = true;
+        bool full_bid_; // whether all three honours bid
+        std::array<int, kNumPlayers> tarok_counts_;
 
         Side &CurrentSide() {
             return (current_player_ == declarer_ || (partner_ && current_player_ == *partner_))
@@ -122,6 +138,7 @@ namespace hungarian_tarok {
                        ? opponents_side_
                        : declarer_side_;
         }
+        bool CanAnnounceTuletroa() const;
     };
 } // namespace hungarian_tarok
 } // namespace open_spiel
