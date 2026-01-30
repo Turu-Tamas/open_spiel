@@ -28,7 +28,6 @@
 #include "open_spiel/spiel.h"
 #include "open_spiel/spiel_globals.h"
 #include "open_spiel/spiel_utils.h"
-
 #include "phases.h"
 
 namespace open_spiel {
@@ -110,12 +109,10 @@ class HungarianTarokObserver final : public Observer {
 }  // namespace
 
 HungarianTarokState::HungarianTarokState(std::shared_ptr<const Game> game)
-    : State(std::move(game)),
-	  phase_(absl::make_unique<SetupPhase>()) {}
+    : State(std::move(game)), phase_(absl::make_unique<SetupPhase>()) {}
 
 HungarianTarokState::HungarianTarokState(const HungarianTarokState& other)
-    : State(other),
-      phase_(other.phase_->Clone()) {}
+    : State(other), phase_(other.phase_->Clone()) {}
 
 int HungarianTarokState::CurrentPlayer() const {
   return phase_->CurrentPlayer();
@@ -135,32 +132,28 @@ std::vector<Action> HungarianTarokState::LegalActions() const {
   return phase_->LegalActions();
 }
 
-std::string HungarianTarokState::ActionToString(Player player, Action move) const {
+std::string HungarianTarokState::ActionToString(Player player,
+                                                Action move) const {
   return phase_->ActionToString(player, move);
 }
 
-std::string HungarianTarokState::ToString() const {
-  return phase_->ToString();
-}
+std::string HungarianTarokState::ToString() const { return phase_->ToString(); }
 
-bool HungarianTarokState::IsTerminal() const {
-  return phase_->GameOver();
-}
+bool HungarianTarokState::IsTerminal() const { return phase_->GameOver(); }
 
 std::vector<double> HungarianTarokState::Returns() const {
-  return std::vector<double>(NumPlayers(), 0.0);
+  return phase_->Returns();
 }
 
 std::string HungarianTarokState::ObservationString(Player player) const {
-  const auto& game =
-      open_spiel::down_cast<const HungarianTarokGame&>(*game_);
+  const auto& game = open_spiel::down_cast<const HungarianTarokGame&>(*game_);
   // Use the game's default observer.
   auto observer = game.MakeObserver(kDefaultObsType, /*params=*/{});
   return observer->StringFrom(*this, player);
 }
 
 void HungarianTarokState::ObservationTensor(Player player,
-                                   absl::Span<float> values) const {
+                                            absl::Span<float> values) const {
   std::fill(values.begin(), values.end(), 0.0f);
 }
 
@@ -168,7 +161,8 @@ std::unique_ptr<State> HungarianTarokState::Clone() const {
   return std::unique_ptr<State>(new HungarianTarokState(*this));
 }
 
-std::vector<std::pair<Action, double>> HungarianTarokState::ChanceOutcomes() const {
+std::vector<std::pair<Action, double>> HungarianTarokState::ChanceOutcomes()
+    const {
   SPIEL_CHECK_TRUE(IsChanceNode());
   std::vector<std::pair<Action, double>> outcomes;
   std::vector<Action> legal_actions = LegalActions();
@@ -180,8 +174,7 @@ std::vector<std::pair<Action, double>> HungarianTarokState::ChanceOutcomes() con
 }
 
 HungarianTarokGame::HungarianTarokGame(const GameParameters& params)
-    : Game(kGameType, params) {
-}
+    : Game(kGameType, params) {}
 
 std::unique_ptr<State> HungarianTarokGame::NewInitialState() const {
   return absl::make_unique<HungarianTarokState>(shared_from_this());
@@ -201,7 +194,8 @@ std::shared_ptr<Observer> HungarianTarokGame::MakeObserver(
   return MakeRegisteredObserver(iig_obs_type, params);
 }
 
-std::string HungarianTarokGame::ActionToString(Player player, Action action) const {
+std::string HungarianTarokGame::ActionToString(Player player,
+                                               Action action) const {
   if (player == kChancePlayerId) {
     return "Chance";
   }
@@ -212,7 +206,7 @@ std::string HungarianTarokGame::ActionToString(Player player, Action action) con
 int HungarianTarokGame::NumPlayers() const { return kNumPlayers; }
 
 int HungarianTarokGame::MaxGameLength() const {
-  return 300; // TODO
+  return 300;  // TODO
 }
 
 }  // namespace hungarian_tarok

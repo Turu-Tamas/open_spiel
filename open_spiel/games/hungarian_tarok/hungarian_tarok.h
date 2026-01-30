@@ -28,13 +28,12 @@
 #include <utility>
 #include <vector>
 
+#include "card.h"
 #include "open_spiel/abseil-cpp/absl/types/optional.h"
 #include "open_spiel/abseil-cpp/absl/types/span.h"
 #include "open_spiel/game_parameters.h"
 #include "open_spiel/observer.h"
 #include "open_spiel/spiel.h"
-
-#include "card.h"
 #include "phases.h"
 
 namespace open_spiel {

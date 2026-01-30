@@ -13,9 +13,11 @@
 // limitations under the License.
 
 #include "open_spiel/games/hungarian_tarok/hungarian_tarok.h"
+
 #include <functional>
 #include <memory>
 #include <vector>
+
 #include "open_spiel/game_parameters.h"
 #include "open_spiel/observer.h"
 #include "open_spiel/policy.h"
@@ -38,7 +40,8 @@ void BasicHungariantarokTests() {
   // auto observer = LoadGame("hungarian_tarok")
   //                     ->MakeObserver(kDefaultObsType,
   //                                    GameParametersFromString("single_tensor"));
-  // testing::RandomSimTestCustomObserver(*LoadGame("hungarian_tarok"), observer);
+  // testing::RandomSimTestCustomObserver(*LoadGame("hungarian_tarok"),
+  // observer);
 }
 
 }  // namespace
