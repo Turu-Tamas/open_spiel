@@ -16,10 +16,10 @@ namespace hungarian_tarok {
             return game_data().deck_[kXXI] == game_data().declarer_ &&
                    game_data().deck_[kSkiz] == game_data().declarer_;
         }
-        if (current_player_ == partner_ && first_round_) {
+        if (current_player_ == game_data().partner_ && first_round_) {
             // in the first round, tuletroa from partner means XXI or Skiz in hand
-            return game_data().deck_[kXXI] == *partner_ ||
-                   game_data().deck_[kSkiz] == *partner_;
+            return game_data().deck_[kXXI] == game_data().partner_ ||
+                   game_data().deck_[kSkiz] == game_data().partner_;
         }
         return true;
     }
@@ -34,8 +34,8 @@ namespace hungarian_tarok {
         }
 
         std::vector<Action> actions;
-        const Side &current_side = CurrentSide();
-        const Side &other_side = OtherSide();
+        const GameData::AnnouncementSide &current_side = CurrentSide();
+        const GameData::AnnouncementSide &other_side = OtherSide();
         // separate loops so actions are sorted
         for (int i = 0; i < kNumAnnouncementTypes; ++i) {
             AnnouncementType type = static_cast<AnnouncementType>(i);
@@ -92,11 +92,11 @@ namespace hungarian_tarok {
                 for (int rank = 20; rank >= 1; --rank) {
                     Card card = MakeTarok(rank);
                     if (game_data().deck_[card] != game_data().declarer_) {
-                        partner_ = game_data().deck_[card];
+                        game_data().partner_ = game_data().deck_[card];
                         break;
                     }
                 }
-                SPIEL_CHECK_TRUE(partner_.has_value());
+                SPIEL_CHECK_TRUE(game_data().partner_.has_value());
             } // else partner = std::nullopt
             partner_called_ = true;
             // next player is the player after declarer
@@ -117,8 +117,8 @@ namespace hungarian_tarok {
         }
 
         AnnouncementAction ann_action = AnnouncementAction::FromAction(action);
-        Side &current_side = CurrentSide();
-        Side &other_side = OtherSide();
+        GameData::AnnouncementSide &current_side = CurrentSide();
+        GameData::AnnouncementSide &other_side = OtherSide();
         int type_index = static_cast<int>(ann_action.type);
         switch (ann_action.level) {
             case AnnouncementAction::Level::kAnnounce:

@@ -47,12 +47,39 @@ namespace hungarian_tarok {
                : static_cast<Suit>((card - kNumTaroks) / kNumRanksPerSuit);
     }
     bool CardBeats(Card a, Card b);
+    constexpr int CardPointValue(const Card card) {
+        SPIEL_CHECK_LT(card, kDeckSize);
+        if (CardSuit(card) == Suit::kTarok) {
+            // taroks
+            if (card == static_cast<Card>(kPagat)) return 5;
+            if (card == static_cast<Card>(kXXI)) return 5;
+            if (card == static_cast<Card>(kSkiz)) return 5;
+            return 1;
+        } else {
+            // suit cards
+            SuitRank rank = static_cast<SuitRank>((card - kNumTaroks) % kNumRanksPerSuit);
+            switch (rank) {
+                case SuitRank::kKing: return 5;
+                case SuitRank::kQueen: return 4;
+                case SuitRank::kRider: return 3;
+                case SuitRank::kJack: return 2;
+                case SuitRank::kAceTen: return 1;
+                default:
+                    SpielFatalError("Invalid card rank");
+                    return 0;
+            }
+        }
+    }
     typedef std::array<Player, kDeckSize> Deck;
     const Player kTalon = -1;
     const Player kDeclarerSkart = -2;
     const Player kOpponentsSkart = -3;
     const Player kCurrentTrick = -4;
-    constexpr Player WonCards(Player p) { return p + kNumPlayers; }
+    constexpr Player WonCardsLocation(Player p) { return p + kNumPlayers; }
+    constexpr Player WonCardsLocationToPlayer(Player p) {
+        SPIEL_CHECK_GE(p, kNumPlayers);
+        return p - kNumPlayers;
+    }
     std::string DeckToString(const Deck &deck);
 
     std::ostream& operator<<(std::ostream& os, const Suit& suit);

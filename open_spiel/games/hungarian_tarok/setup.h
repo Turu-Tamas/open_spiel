@@ -38,6 +38,9 @@ namespace hungarian_tarok {
             SPIEL_CHECK_GE(action, 0);
             SPIEL_CHECK_LT(action, kNumPlayers);
             SPIEL_CHECK_FALSE(PhaseOver());
+            if (current_card_ == kPagat) {
+                game_data().pagat_holder_ = action;
+            }
             // Action is the player ID who receives the next card.
             game_data().deck_[current_card_] = action;
             player_hands_sizes_[action]++;

@@ -102,37 +102,30 @@ namespace hungarian_tarok {
     private:
         Player current_player_ = 0;
 
-        struct Side {
-            std::array<bool, kNumAnnouncementTypes> announced = {false};
-            std::array<int, kNumAnnouncementTypes> contra_level = {0};
-        };
-        Side declarer_side_;
-        Side opponents_side_;
         bool partner_called_ = false;
-        std::optional<Player> partner_;
         Player last_to_speak_;
         bool first_round_ = true;
         std::array<int, kNumPlayers> tarok_counts_;
 
-        Side &CurrentSide() {
-			return (current_player_ == game_data().declarer_ || (partner_ && current_player_ == *partner_))
-                       ? declarer_side_
-                       : opponents_side_;
+        GameData::AnnouncementSide &CurrentSide() {
+			return (current_player_ == game_data().declarer_ || (current_player_ == game_data().partner_))
+                       ? game_data().declarer_side_
+                       : game_data().opponents_side_;
         }
-        Side &/*take it on the*/OtherSide() {
-			return (current_player_ == game_data().declarer_ || (partner_ && current_player_ == *partner_))
-                       ? opponents_side_
-                       : declarer_side_;
+        GameData::AnnouncementSide &/*take it on the*/OtherSide() {
+			return (current_player_ == game_data().declarer_ || (current_player_ == game_data().partner_))
+                       ? game_data().opponents_side_
+                       : game_data().declarer_side_;
         }
-        const Side &CurrentSide() const {
-			return (current_player_ == game_data().declarer_ || (partner_ && current_player_ == *partner_))
-                       ? declarer_side_
-                       : opponents_side_;
+        const GameData::AnnouncementSide &CurrentSide() const {
+			return (current_player_ == game_data().declarer_ || (current_player_ == game_data().partner_))
+                       ? game_data().declarer_side_
+                       : game_data().opponents_side_;
         }
-        const Side &OtherSide() const {
-			return (current_player_ == game_data().declarer_ || (partner_ && current_player_ == *partner_))
-                       ? opponents_side_
-                       : declarer_side_;
+        const GameData::AnnouncementSide &OtherSide() const {
+			return (current_player_ == game_data().declarer_ || (current_player_ == game_data().partner_))
+                       ? game_data().opponents_side_
+                       : game_data().declarer_side_;
         }
         bool CanAnnounceTuletroa() const;
     };
