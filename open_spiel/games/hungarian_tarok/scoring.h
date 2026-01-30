@@ -1,9 +1,14 @@
 #ifndef OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_SCORING_H_
 #define OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_SCORING_H_
 
-#include "game_phase.h"
-#include "announcements.h"
-#include "bidding.h"
+#include <algorithm>
+#include <array>
+#include <optional>
+#include <vector>
+
+#include "open_spiel/abseil-cpp/absl/algorithm/container.h"
+
+#include "phases.h"
 
 namespace open_spiel {
 namespace hungarian_tarok {
@@ -165,16 +170,54 @@ namespace hungarian_tarok {
     PagatUltimoResult pagat_ultimo_result = PagatUltimoWinnerSide(game_data);
     Side pagat_side = game_data.player_sides_[game_data.pagat_holder_];
     Side other_side = pagat_side == Side::kDeclarer ? Side::kOpponents : Side::kDeclarer;
+    const bool &pagatulti_announced = pagat_side == Side::kDeclarer
+                              ? game_data.declarer_side_.announced[static_cast<int>(AnnouncementType::kPagatUltimo)]
+                              : game_data.opponents_side_.announced[static_cast<int>(AnnouncementType::kPagatUltimo)];
+
+    if (pagat_ultimo_result == PagatUltimoResult::kFailed && !pagatulti_announced) {
+      // failed ulti without announcement: other side gets the score
+      if (pagat_side == Side::kDeclarer) {
+        declarer_score -= kPagatUltimoScore;
+      } else {
+        declarer_score += kPagatUltimoScore;
+      }
+    }
     if (pagat_ultimo_result == PagatUltimoResult::kSucceeded) {
       add_scores(pagat_side, kPagatUltimoScore, AnnouncementType::kPagatUltimo);
-    } else if (pagat_ultimo_result == PagatUltimoResult::kFailed) {
-      add_scores(other_side, kPagatUltimoScore, AnnouncementType::kPagatUltimo);
-    } else { // kNotInLastTrick
+    } else {
+      // kNotInLastTrick or kFailed (even if the pagat failed, if the other announced ulti, they also lose the score)
       add_scores(std::nullopt, kPagatUltimoScore, AnnouncementType::kPagatUltimo);
     }
-    
+
     auto double_game_winner = DoubleGameWinnerSide(game_data);
+    auto volat_winner = VolatWinnerSide(game_data);
+    GameData::AnnouncementSide const& double_side = 
+        double_game_winner == Side::kDeclarer ? game_data.declarer_side_ : game_data.opponents_side_;
+    add_scores(volat_winner, kGameBaseScore * kVolatMultiplier, AnnouncementType::kVolat);
+    // dont score unannounced double games if volat
+    if (!volat_winner.has_value() || double_side.announced[static_cast<int>(AnnouncementType::kDoubleGame)]) {
+      add_scores(double_game_winner, kGameBaseScore * kDoubleGameMultiplier, AnnouncementType::kDoubleGame);
+    }
     
+    if (!double_game_winner.has_value() && !volat_winner.has_value()) {
+      // normal game scoring
+      if (DeclarerCardPoints(game_data) > 47) {
+        declarer_score += kGameBaseScore;
+      } else {
+        declarer_score -= kGameBaseScore;
+      }
+    }
+
+    // declarer played alone, everyone pays/gets paid by them
+    if (!game_data.partner_.has_value()) {
+      declarer_score *= 3;
+    }
+    std::array<int, kNumPlayers> scores;
+    scores.fill(0);
+    for (int player = 0; player < kNumPlayers; ++player) {
+      scores[player] = (game_data.player_sides_[player] == Side::kDeclarer) ? declarer_score : -declarer_score;
+    }
+    return scores;
   }
 } // namespace hungarian_tarok
 } // namespace open_spiel

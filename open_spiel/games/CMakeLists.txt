@@ -104,17 +104,10 @@ set(GAME_SOURCES
   hive/hive_board.h
   hungarian_tarok/hungarian_tarok.h
   hungarian_tarok/hungarian_tarok.cc
-  hungarian_tarok/bidding.cc
-  hungarian_tarok/bidding.h
-  hungarian_tarok/game_phase.h
-  hungarian_tarok/setup.h
-  hungarian_tarok/announcements.h
-  hungarian_tarok/announcements.cc
   hungarian_tarok/card.h
   hungarian_tarok/card.cc
-  hungarian_tarok/talon.h
-  hungarian_tarok/skart.h
-  hungarian_tarok/play.h
+  hungarian_tarok/phases.h
+  hungarian_tarok/phases.cc
   hungarian_tarok/scoring.h
   kriegspiel/kriegspiel.cc
   kriegspiel/kriegspiel.h

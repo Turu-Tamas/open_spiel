@@ -35,7 +35,7 @@
 #include "open_spiel/spiel.h"
 
 #include "card.h"
-#include "game_phase.h"
+#include "phases.h"
 
 namespace open_spiel {
 namespace hungarian_tarok {

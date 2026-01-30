@@ -29,12 +29,7 @@
 #include "open_spiel/spiel_globals.h"
 #include "open_spiel/spiel_utils.h"
 
-#include "game_phase.h"
-#include "setup.h"
-#include "talon.h"
-#include "skart.h"
-#include "play.h"
-#include "scoring.h"
+#include "phases.h"
 
 namespace open_spiel {
 namespace hungarian_tarok {
