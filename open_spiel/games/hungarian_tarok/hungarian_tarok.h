@@ -104,7 +104,7 @@ class HungarianTarokState : public State {
   std::string TalonActionToString(Player player, Action action) const;
   std::string TalonToString() const;
   void StartTalonPhase();
-  bool TrialThreeGameEnded(); // private helper
+  bool TrialThreeGameEnded();  // private helper
   std::vector<double> TalonReturns() const;
   bool TalonGameOver() const;
 

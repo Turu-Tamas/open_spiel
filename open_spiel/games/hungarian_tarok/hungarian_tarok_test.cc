@@ -25,7 +25,6 @@
 #include "open_spiel/spiel_utils.h"
 #include "open_spiel/tests/basic_tests.h"
 #include "open_spiel/tests/console_play_test.h"
-
 #include "phases.h"
 
 namespace open_spiel {
@@ -92,8 +91,9 @@ void TrialThreeTest() {
     while (state.GetPhaseType() == PhaseType::kBidding) {
       std::vector<Action> legal_actions = state.LegalActions();
       if (state.CurrentPlayer() == 3) {
-        SPIEL_CHECK_TRUE(absl::c_find(legal_actions, kBiddingActionStandardBid) !=
-                        legal_actions.end());
+        SPIEL_CHECK_TRUE(
+            absl::c_find(legal_actions, kBiddingActionStandardBid) !=
+            legal_actions.end());
         state.ApplyAction(kBiddingActionStandardBid);
       } else {
         state.ApplyAction(kBiddingActionPass);
@@ -116,8 +116,6 @@ void TrialThreeTest() {
     }
   }
 }
-
-
 
 void ConsolePlayHungariantarokTest() {
   std::mt19937 mt(1234);

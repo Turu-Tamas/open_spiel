@@ -239,5 +239,5 @@ std::vector<Card> HungarianTarokState::PlayerHand(Player player) const {
   return hand;
 }
 
-}  // namespae hungarian_tarok
+}  // namespace hungarian_tarok
 }  // namespace open_spiel
