@@ -12,13 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Placeholder implementation for the "hungarian_tarok" game.
-//
-// This file previously contained Leduc-poker-derived code. The poker-specific
-// concepts (betting, pot, raises, private/public poker cards, showdown, etc.)
-// are intentionally removed.
-//
-// No Hungarian Tarok rules are implemented yet.
+// Hungarian Tarok implementation.
 
 #ifndef OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_H_
 #define OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_H_
@@ -45,9 +39,9 @@ enum ActionType : Action { kPass = 0 };
 class HungarianTarokGame;
 
 class HungarianTarokState : public State {
- public:
+public:
   explicit HungarianTarokState(std::shared_ptr<const Game> game);
-  HungarianTarokState(const HungarianTarokState& other);
+  HungarianTarokState(const HungarianTarokState &other);
 
   Player CurrentPlayer() const override;
   std::string ActionToString(Player player, Action move) const override;
@@ -63,19 +57,144 @@ class HungarianTarokState : public State {
 
   std::unique_ptr<State> Clone() const override;
 
-  PhaseType GetPhaseType() const {
-    return phase_->phase_type();
-  }
- protected:
+  PhaseType GetPhaseType() const { return current_phase_; }
+
+  const GameData &game_data() const { return game_data_; }
+
+protected:
   void DoApplyAction(Action move) override;
 
- private:
-  std::unique_ptr<GamePhase> phase_;
+private:
+  // Phase dispatch.
+  Player PhaseCurrentPlayer() const;
+  std::vector<Action> PhaseLegalActions() const;
+  void PhaseDoApplyAction(Action action);
+  bool PhaseOver() const;
+  bool GameOver() const;
+  std::vector<double> PhaseReturns() const;
+  std::string PhaseActionToString(Player player, Action action) const;
+  std::string PhaseToString() const;
+  void AdvancePhase();
+
+  // Phase implementations.
+  // Setup.
+  Player SetupCurrentPlayer() const;
+  std::vector<Action> SetupLegalActions() const;
+  void SetupDoApplyAction(Action action);
+  bool SetupPhaseOver() const;
+  std::string SetupActionToString(Player player, Action action) const;
+  std::string SetupToString() const;
+
+  // Bidding.
+  Player BiddingCurrentPlayer() const;
+  std::vector<Action> BiddingLegalActions() const;
+  void BiddingDoApplyAction(Action action);
+  bool BiddingPhaseOver() const;
+  bool BiddingGameOver() const;
+  std::string BiddingActionToString(Player player, Action action) const;
+  std::string BiddingToString() const;
+  void StartBiddingPhase();
+  void BiddingNextPlayer();
+
+  // Talon dealing.
+  Player TalonCurrentPlayer() const;
+  std::vector<Action> TalonLegalActions() const;
+  void TalonDoApplyAction(Action action);
+  bool TalonPhaseOver() const;
+  std::string TalonActionToString(Player player, Action action) const;
+  std::string TalonToString() const;
+  void StartTalonPhase();
+
+  // Skart.
+  Player SkartCurrentPlayer() const;
+  std::vector<Action> SkartLegalActions() const;
+  void SkartDoApplyAction(Action action);
+  bool SkartPhaseOver() const;
+  std::string SkartActionToString(Player player, Action action) const;
+  std::string SkartToString() const;
+  void StartSkartPhase();
+
+  // Announcements.
+  Player AnnouncementsCurrentPlayer() const;
+  std::vector<Action> AnnouncementsLegalActions() const;
+  void AnnouncementsDoApplyAction(Action action);
+  bool AnnouncementsPhaseOver() const;
+  std::string AnnouncementsActionToString(Player player, Action action) const;
+  std::string AnnouncementsToString() const;
+  void StartAnnouncementsPhase();
+  void AnnouncementsCallPartner(Action action);
+  bool IsDeclarerSidePlayer(Player player) const;
+  GameData::AnnouncementSide &CurrentAnnouncementSide();
+  GameData::AnnouncementSide &OtherAnnouncementSide();
+  const GameData::AnnouncementSide &CurrentAnnouncementSide() const;
+  const GameData::AnnouncementSide &OtherAnnouncementSide() const;
+  bool CanAnnounceTuletroa() const;
+
+  // Play.
+  Player PlayCurrentPlayer() const;
+  std::vector<Action> PlayLegalActions() const;
+  void PlayDoApplyAction(Action action);
+  bool PlayPhaseOver() const;
+  bool PlayGameOver() const;
+  std::string PlayActionToString(Player player, Action action) const;
+  std::string PlayToString() const;
+  std::vector<double> PlayReturns() const;
+  void StartPlayPhase();
+  void ResolveTrick();
+
+  // Persistent game data.
+  GameData game_data_{};
+  PhaseType current_phase_ = PhaseType::kSetup;
+
+  // Per-phase state.
+  struct SetupState {
+    std::array<int, kNumPlayers> player_hands_sizes{};
+    Card current_card = 0;
+  } setup_;
+
+  struct BiddingState {
+    Player current_player = 0;
+    int lowest_bid = 4;
+    bool was_held = false;
+    bool all_passed = false;
+    std::array<bool, kNumPlayers> has_passed{};
+    std::array<bool, kNumPlayers> has_honour{};
+    std::array<bool, kNumPlayers> has_bid{};
+  } bidding_;
+
+  struct TalonState {
+    Player current_player = 0; // the current player receiving a card
+    std::array<Card, kTalonSize> talon_cards{};
+    std::array<bool, kTalonSize> talon_taken{};
+    std::array<int, kNumPlayers> cards_to_take{};
+    int talon_taken_count = 0;
+  } talon_;
+
+  struct SkartState {
+    Player current_player = 0;
+    std::array<int, kNumPlayers> hand_sizes{};
+    int cards_discarded = 0;
+  } skart_;
+
+  struct AnnouncementsState {
+    Player current_player = 0;
+    bool partner_called = false;
+    Player last_to_speak = 0;
+    bool first_round = true;
+    std::array<int, kNumPlayers> tarok_counts{};
+  } announcements_;
+
+  struct PlayState {
+    Player current_player = 0;
+    Player trick_caller = 0;
+    std::vector<Card> trick_cards;
+    int round = 0;
+  } play_;
 };
 
 class HungarianTarokGame : public Game {
- public:
-  explicit HungarianTarokGame(const GameParameters& params);
+public:
+  explicit HungarianTarokGame(const GameParameters &params);
 
   int NumDistinctActions() const override { return kDeckSize; }
   std::unique_ptr<State> NewInitialState() const override;
@@ -89,14 +208,14 @@ class HungarianTarokGame : public Game {
 
   std::string ActionToString(Player player, Action action) const override;
 
-  std::shared_ptr<Observer> MakeObserver(
-      absl::optional<IIGObservationType> iig_obs_type,
-      const GameParameters& params) const override;
+  std::shared_ptr<Observer>
+  MakeObserver(absl::optional<IIGObservationType> iig_obs_type,
+               const GameParameters &params) const override;
 
- private:
+private:
 };
 
-}  // namespace hungarian_tarok
-}  // namespace open_spiel
+} // namespace hungarian_tarok
+} // namespace open_spiel
 
-#endif  // OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_H_
+#endif // OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_H_

@@ -31,9 +31,10 @@ namespace hungarian_tarok {
 namespace {
 
 namespace testing = open_spiel::testing;
-HungarianTarokState PostSetupState(std::mt19937& mt) {
+HungarianTarokState PostSetupState(std::mt19937 &mt) {
   auto game = LoadGame("hungarian_tarok");
-  HungarianTarokState state(std::static_pointer_cast<const HungarianTarokGame>(game));
+  HungarianTarokState state(
+      std::static_pointer_cast<const HungarianTarokGame>(game));
   while (state.GetPhaseType() == PhaseType::kSetup) {
     auto outcomes = state.ChanceOutcomes();
     state.ApplyAction(SampleAction(outcomes, mt).first);
@@ -41,7 +42,7 @@ HungarianTarokState PostSetupState(std::mt19937& mt) {
   return state;
 }
 
-HungarianTarokState PostBiddingState(std::mt19937& mt) {
+HungarianTarokState PostBiddingState(std::mt19937 &mt) {
   HungarianTarokState state = PostSetupState(mt);
   while (state.GetPhaseType() == PhaseType::kBidding) {
     auto legal_actions = state.LegalActions();
@@ -51,7 +52,7 @@ HungarianTarokState PostBiddingState(std::mt19937& mt) {
   return state;
 }
 
-HungarianTarokState PostTalonState(std::mt19937& mt) {
+HungarianTarokState PostTalonState(std::mt19937 &mt) {
   HungarianTarokState state = PostBiddingState(mt);
   while (state.GetPhaseType() == PhaseType::kTalon) {
     auto outcomes = state.ChanceOutcomes();
@@ -60,7 +61,7 @@ HungarianTarokState PostTalonState(std::mt19937& mt) {
   return state;
 }
 
-HungarianTarokState PostSkartState(std::mt19937& mt) {
+HungarianTarokState PostSkartState(std::mt19937 &mt) {
   HungarianTarokState state = PostTalonState(mt);
   while (state.GetPhaseType() == PhaseType::kSkart) {
     auto legal_actions = state.LegalActions();
@@ -85,13 +86,13 @@ void ConsolePlayHungariantarokTest() {
   std::mt19937 mt(1234);
   HungarianTarokState state = PostSkartState(mt);
   testing::ConsolePlayTest(*LoadGame("hungarian_tarok"), &state);
-} 
+}
 
-}  // namespace
-}  // namespace hungarian_tarok
-}  // namespace open_spiel
+} // namespace
+} // namespace hungarian_tarok
+} // namespace open_spiel
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
   open_spiel::hungarian_tarok::BasicHungariantarokTests();
   open_spiel::hungarian_tarok::ConsolePlayHungariantarokTest();
 }
