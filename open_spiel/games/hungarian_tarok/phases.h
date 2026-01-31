@@ -34,6 +34,15 @@ enum class AnnouncementType {
   kNineTaroks = 7,
 };
 
+enum class PhaseType {
+  kSetup,
+  kBidding,
+  kTalon,
+  kSkart,
+  kAnnouncements,
+  kPlay
+};
+
 // Shared game state across different phases.
 struct GameData {
   Deck deck_;
@@ -71,6 +80,8 @@ struct GameData {
 class GamePhase {
  public:
   virtual ~GamePhase() = default;
+
+  virtual PhaseType phase_type() const = 0;
 
   // Delegation points corresponding to the OpenSpiel `State` API.
   virtual Player CurrentPlayer() const = 0;
@@ -115,22 +126,127 @@ class GamePhase {
   GameData& game_data() { return *game_data_; }
   const GameData& game_data() const { return *game_data_; }
 
-  std::unique_ptr<GameData> game_data_;
-};
+  Deck& deck() {
+    SPIEL_CHECK_TRUE(game_data_ != nullptr);
+    return game_data_->deck_;
+  }
+  const Deck& deck() const {
+    SPIEL_CHECK_TRUE(game_data_ != nullptr);
+    return game_data_->deck_;
+  }
 
-enum class PhaseType {
-  kSetup,
-  kBidding,
-  kTalon,
-  kSkart,
-  kAnnouncements,
-  kPlay
+  Player& declarer() {
+    CheckPhaseAtLeast(PhaseType::kBidding, "declarer");
+    return game_data_->declarer_;
+  }
+  Player declarer() const {
+    CheckPhaseAtLeast(PhaseType::kBidding, "declarer");
+    return game_data_->declarer_;
+  }
+
+  int& winning_bid() {
+    CheckPhaseAtLeast(PhaseType::kBidding, "winning_bid");
+    return game_data_->winning_bid_;
+  }
+  int winning_bid() const {
+    CheckPhaseAtLeast(PhaseType::kBidding, "winning_bid");
+    return game_data_->winning_bid_;
+  }
+
+  bool& full_bid() {
+    CheckPhaseAtLeast(PhaseType::kBidding, "full_bid");
+    return game_data_->full_bid_;
+  }
+  bool full_bid() const {
+    CheckPhaseAtLeast(PhaseType::kBidding, "full_bid");
+    return game_data_->full_bid_;
+  }
+
+  std::optional<Player>& partner() {
+    CheckPhaseAtLeast(PhaseType::kAnnouncements, "partner");
+    return game_data_->partner_;
+  }
+  const std::optional<Player>& partner() const {
+    CheckPhaseAtLeast(PhaseType::kAnnouncements, "partner");
+    return game_data_->partner_;
+  }
+
+  void SetPagatHolder(Player player) {
+    SPIEL_CHECK_TRUE(game_data_ != nullptr);
+    game_data_->pagat_holder_ = player;
+  }
+  Player pagat_holder() const {
+    CheckPhaseAtLeast(PhaseType::kBidding, "pagat_holder");
+    return game_data_->pagat_holder_;
+  }
+
+  GameData::AnnouncementSide& declarer_side() {
+    CheckPhaseAtLeast(PhaseType::kAnnouncements, "declarer_side");
+    return game_data_->declarer_side_;
+  }
+  const GameData::AnnouncementSide& declarer_side() const {
+    CheckPhaseAtLeast(PhaseType::kAnnouncements, "declarer_side");
+    return game_data_->declarer_side_;
+  }
+  GameData::AnnouncementSide& opponents_side() {
+    CheckPhaseAtLeast(PhaseType::kAnnouncements, "opponents_side");
+    return game_data_->opponents_side_;
+  }
+  const GameData::AnnouncementSide& opponents_side() const {
+    CheckPhaseAtLeast(PhaseType::kAnnouncements, "opponents_side");
+    return game_data_->opponents_side_;
+  }
+  std::array<Side, kNumPlayers>& player_sides() {
+    CheckPhaseAtLeast(PhaseType::kAnnouncements, "player_sides");
+    return game_data_->player_sides_;
+  }
+  const std::array<Side, kNumPlayers>& player_sides() const {
+    CheckPhaseAtLeast(PhaseType::kAnnouncements, "player_sides");
+    return game_data_->player_sides_;
+  }
+
+  std::vector<GameData::Trick>& tricks() {
+    CheckPhaseAtLeast(PhaseType::kPlay, "tricks");
+    return game_data_->tricks_;
+  }
+  const std::vector<GameData::Trick>& tricks() const {
+    CheckPhaseAtLeast(PhaseType::kPlay, "tricks");
+    return game_data_->tricks_;
+  }
+  std::vector<Player>& trick_winners() {
+    CheckPhaseAtLeast(PhaseType::kPlay, "trick_winners");
+    return game_data_->trick_winners_;
+  }
+  const std::vector<Player>& trick_winners() const {
+    CheckPhaseAtLeast(PhaseType::kPlay, "trick_winners");
+    return game_data_->trick_winners_;
+  }
+
+  const GameData& game_data_for_scoring() const {
+    CheckPhaseAtLeast(PhaseType::kPlay, "game_data_for_scoring");
+    return *game_data_;
+  }
+
+  void CheckPhaseAtLeast(PhaseType min_phase, const char* field_name) const {
+    SPIEL_CHECK_TRUE(game_data_ != nullptr);
+    const int current = static_cast<int>(phase_type());
+    const int required = static_cast<int>(min_phase);
+    if (current < required) {
+      open_spiel::SpielFatalError(open_spiel::internal::SpielStrCat(
+          "Tried to access GameData field '", field_name,
+          "' before it is ready (current phase: ", current,
+          ", required >= ", required, ")."));
+    }
+  }
+
+  std::unique_ptr<GameData> game_data_;
 };
 
 class SetupPhase : public GamePhase {
  public:
   SetupPhase();
   ~SetupPhase() override;
+  PhaseType phase_type() const override { return PhaseType::kSetup; }
   Player CurrentPlayer() const override;
   std::vector<Action> LegalActions() const override;
   void DoApplyAction(Action action) override;

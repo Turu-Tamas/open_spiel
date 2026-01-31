@@ -67,10 +67,12 @@ class BiddingPhase final : public GamePhase {
  public:
   explicit BiddingPhase(std::unique_ptr<GameData> game_data)
       : GamePhase(std::move(game_data)) {
-    has_honour_[this->game_data().deck_[kSkiz]] = true;
-    has_honour_[this->game_data().deck_[kPagat]] = true;
-    has_honour_[this->game_data().deck_[kXXI]] = true;
+    has_honour_[this->deck()[kSkiz]] = true;
+    has_honour_[this->deck()[kPagat]] = true;
+    has_honour_[this->deck()[kXXI]] = true;
   }
+
+  PhaseType phase_type() const override { return PhaseType::kBidding; }
 
   Player CurrentPlayer() const override { return current_player_; }
 
@@ -96,7 +98,7 @@ class BiddingPhase final : public GamePhase {
         lowest_bid_ -= 1;
         was_held_ = false;
       }
-      game_data().declarer_ = current_player_;
+      declarer() = current_player_;
       has_bid_[current_player_] = true;
     } else if (action == kBiddingActionPass) {
       has_passed_[current_player_] = true;
@@ -138,7 +140,7 @@ class BiddingPhase final : public GamePhase {
     while (has_passed_[next_player] && next_player != current_player_) {
       next_player = (next_player + 1) % kNumPlayers;
     }
-    if (next_player == game_data().declarer_) {
+    if (next_player == declarer()) {
       current_player_ = kTerminalPlayerId;
       return;
     }
@@ -146,8 +148,8 @@ class BiddingPhase final : public GamePhase {
       // Everyone passed.
       current_player_ = kTerminalPlayerId;
       all_passed_ = true;
-      game_data().declarer_ = -1;
-      game_data().winning_bid_ = -1;
+      declarer() = -1;
+      winning_bid() = -1;
       return;
     }
     current_player_ = next_player;
@@ -166,8 +168,8 @@ class DealTalonPhase final : public GamePhase {
  public:
   explicit DealTalonPhase(std::unique_ptr<GameData> game_data)
       : GamePhase(std::move(game_data)) {
-    Player declarer = this->game_data().declarer_;
-    int declarer_cards_to_take = this->game_data().winning_bid_;
+  Player declarer = this->declarer();
+  int declarer_cards_to_take = this->winning_bid();
 
     cards_to_take_ = {0, 0, 0, 0};
     cards_to_take_[declarer] = declarer_cards_to_take;
@@ -187,12 +189,14 @@ class DealTalonPhase final : public GamePhase {
 
     int index = 0;
     for (Card card = 0; card < kDeckSize; ++card) {
-      if (this->game_data().deck_[card] == kTalon) {
+      if (this->deck()[card] == kTalon) {
         talon_cards_[index++] = card;
       }
     }
     SPIEL_CHECK_EQ(index, kTalonSize);
   }
+
+  PhaseType phase_type() const override { return PhaseType::kTalon; }
 
   Player CurrentPlayer() const override {
     return PhaseOver() ? kTerminalPlayerId : kChancePlayerId;
@@ -216,7 +220,7 @@ class DealTalonPhase final : public GamePhase {
     SPIEL_CHECK_FALSE(PhaseOver());
 
     talon_taken_[action] = true;
-    game_data().deck_[talon_cards_[action]] = current_player_;
+    deck()[talon_cards_[action]] = current_player_;
     talon_taken_count_++;
     cards_to_take_[current_player_]--;
 
@@ -259,13 +263,15 @@ class SkartPhase final : public GamePhase {
       : GamePhase(std::move(game_data)) {
     hand_sizes_.fill(0);
     for (Card card = 0; card < kDeckSize; ++card) {
-      Player owner = this->game_data().deck_[card];
+      Player owner = this->deck()[card];
       if (owner >= 0 && owner < kNumPlayers) {
         hand_sizes_[owner]++;
       }
     }
-    current_player_ = this->game_data().declarer_;
+    current_player_ = this->declarer();
   }
+
+  PhaseType phase_type() const override { return PhaseType::kSkart; }
 
   Player CurrentPlayer() const override { return current_player_; }
 
@@ -273,7 +279,7 @@ class SkartPhase final : public GamePhase {
     SPIEL_CHECK_FALSE(PhaseOver());
     std::vector<Action> actions;
     for (Card card = 0; card < kDeckSize; ++card) {
-      if (game_data().deck_[card] == current_player_) {
+      if (deck()[card] == current_player_) {
         actions.push_back(card);
       }
     }
@@ -283,13 +289,13 @@ class SkartPhase final : public GamePhase {
   void DoApplyAction(Action action) override {
     SPIEL_CHECK_GE(action, 0);
     SPIEL_CHECK_LT(action, kDeckSize);
-    SPIEL_CHECK_EQ(game_data().deck_[action], current_player_);
+    SPIEL_CHECK_EQ(deck()[action], current_player_);
     SPIEL_CHECK_FALSE(PhaseOver());
 
-    if (current_player_ == game_data().declarer_) {
-      game_data().deck_[action] = kDeclarerSkart;
+    if (current_player_ == declarer()) {
+      deck()[action] = kDeclarerSkart;
     } else {
-      game_data().deck_[action] = kOpponentsSkart;
+      deck()[action] = kOpponentsSkart;
     }
     cards_discarded_++;
 
@@ -319,7 +325,7 @@ class SkartPhase final : public GamePhase {
 
   std::string ToString() const override {
     return absl::StrCat("Skart Phase, ", cards_discarded_, "/6 cards discarded",
-                        "\n", DeckToString(game_data().deck_));
+                        "\n", DeckToString(deck()));
   }
 
  private:
@@ -332,11 +338,11 @@ class AnnouncementsPhase final : public GamePhase {
  public:
   explicit AnnouncementsPhase(std::unique_ptr<GameData> game_data)
       : GamePhase(std::move(game_data)) {
-    current_player_ = this->game_data().declarer_;
+    current_player_ = this->declarer();
     tarok_counts_.fill(0);
     for (Card card = 0; card < kDeckSize; ++card) {
       if (CardSuit(card) == Suit::kTarok) {
-        Player owner = this->game_data().deck_[card];
+        Player owner = this->deck()[card];
         if (owner >= 0 && owner < kNumPlayers) {
           tarok_counts_[owner]++;
         }
@@ -344,12 +350,14 @@ class AnnouncementsPhase final : public GamePhase {
     }
   }
 
+  PhaseType phase_type() const override { return PhaseType::kAnnouncements; }
+
   Player CurrentPlayer() const override { return current_player_; }
 
   std::vector<Action> LegalActions() const override {
     SPIEL_CHECK_FALSE(PhaseOver());
     if (!partner_called_) {
-      if (game_data().deck_[MakeTarok(20)] == game_data().declarer_) {
+      if (deck()[MakeTarok(20)] == declarer()) {
         // Declarer can call self with XX.
         return {kAnnouncementsActionCallPartner, kAnnouncementsActionCallSelf};
       }
@@ -417,24 +425,27 @@ class AnnouncementsPhase final : public GamePhase {
         // Call highest tarok not in declarer's hand.
         for (int rank = 20; rank >= 1; --rank) {
           Card card = MakeTarok(rank);
-          if (game_data().deck_[card] != game_data().declarer_) {
+          if (deck()[card] != declarer()) {
             // the card my have been discarded to skart
-            game_data().partner_ = IsPlayerHandLocation(game_data().deck_[card]) ? std::optional<Player>(game_data().deck_[card]) : std::nullopt;
+            Player location = deck()[card];
+            partner() = IsPlayerHandLocation(location)
+                           ? std::optional<Player>(location)
+                           : std::nullopt;
             break;
           }
         }
       }  else {
-        game_data().partner_ = std::nullopt;
+        partner() = std::nullopt;
       }
 
       partner_called_ = true;
       // Next player is the player after declarer.
-      current_player_ = (game_data().declarer_ + 1) % kNumPlayers;
-      last_to_speak_ = game_data().declarer_;
+      current_player_ = (declarer() + 1) % kNumPlayers;
+      last_to_speak_ = declarer();
 
       for (Player p = 0; p < kNumPlayers; ++p) {
-        game_data().player_sides_[p] =
-            (p == game_data().declarer_ || p == game_data().partner_)
+        player_sides()[p] =
+            (p == declarer() || p == partner())
                 ? Side::kDeclarer
                 : Side::kOpponents;
       }
@@ -446,7 +457,7 @@ class AnnouncementsPhase final : public GamePhase {
       if (current_player_ == last_to_speak_) {
         current_player_ = kTerminalPlayerId;  // end of phase
       }
-      if (current_player_ == game_data().declarer_) {
+      if (current_player_ == declarer()) {
         first_round_ = false;
       }
       return;
@@ -544,24 +555,24 @@ class AnnouncementsPhase final : public GamePhase {
 
  private:
   bool IsDeclarerSidePlayer(Player player) const {
-    return player == game_data().partner_ || player == game_data().declarer_;
+    return player == partner() || player == declarer();
   }
 
   GameData::AnnouncementSide& CurrentSide() {
-    return IsDeclarerSidePlayer(current_player_) ? game_data().declarer_side_
-                                                 : game_data().opponents_side_;
+    return IsDeclarerSidePlayer(current_player_) ? declarer_side()
+                                                 : opponents_side();
   }
   GameData::AnnouncementSide& OtherSide() {
-    return IsDeclarerSidePlayer(current_player_) ? game_data().opponents_side_
-                                                 : game_data().declarer_side_;
+    return IsDeclarerSidePlayer(current_player_) ? opponents_side()
+                                                 : declarer_side();
   }
   const GameData::AnnouncementSide& CurrentSide() const {
-    return IsDeclarerSidePlayer(current_player_) ? game_data().declarer_side_
-                                                 : game_data().opponents_side_;
+    return IsDeclarerSidePlayer(current_player_) ? declarer_side()
+                                                 : opponents_side();
   }
   const GameData::AnnouncementSide& OtherSide() const {
-    return IsDeclarerSidePlayer(current_player_) ? game_data().opponents_side_
-                                                 : game_data().declarer_side_;
+    return IsDeclarerSidePlayer(current_player_) ? opponents_side()
+                                                 : declarer_side();
   }
 
   bool CanAnnounceTuletroa() const {
@@ -569,22 +580,19 @@ class AnnouncementsPhase final : public GamePhase {
             .announced[static_cast<int>(AnnouncementType::kTuletroa)]) {
       return false;  // already announced
     }
-    if (game_data().full_bid_ && current_player_ == game_data().declarer_ &&
+    if (full_bid() && current_player_ == declarer() &&
         first_round_) {
       // In full bid in the first round tuletroa from declarer means skiz in
       // hand.
-      return game_data().deck_[kSkiz] == game_data().declarer_;
+      return deck()[kSkiz] == declarer();
     }
-    if (current_player_ == game_data().declarer_ && first_round_) {
+    if (current_player_ == declarer() && first_round_) {
       // In the first round, tuletroa from declarer means XXI and Skiz in hand.
-      return game_data().deck_[kXXI] == game_data().declarer_ &&
-             game_data().deck_[kSkiz] == game_data().declarer_;
+      return deck()[kXXI] == declarer() && deck()[kSkiz] == declarer();
     }
-    if (game_data().partner_.has_value() &&
-        current_player_ == *game_data().partner_ && first_round_) {
+    if (partner().has_value() && current_player_ == *partner() && first_round_) {
       // In the first round, tuletroa from partner means XXI or Skiz in hand.
-      return game_data().deck_[kXXI] == *game_data().partner_ ||
-             game_data().deck_[kSkiz] == *game_data().partner_;
+      return deck()[kXXI] == *partner() || deck()[kSkiz] == *partner();
     }
     return true;
   }
@@ -600,9 +608,11 @@ class PlayPhase final : public GamePhase {
  public:
   explicit PlayPhase(std::unique_ptr<GameData> game_data)
       : GamePhase(std::move(game_data)) {
-    current_player_ = this->game_data().declarer_;
+    current_player_ = this->declarer();
     trick_caller_ = current_player_;
   }
+
+  PhaseType phase_type() const override { return PhaseType::kPlay; }
 
   Player CurrentPlayer() const override { return current_player_; }
 
@@ -615,7 +625,7 @@ class PlayPhase final : public GamePhase {
              CardSuit(trick_cards_.front()) == CardSuit(card);
     };
     for (Card card = 0; card < kDeckSize; ++card) {
-      if (game_data().deck_[card] == current_player_ && can_play(card)) {
+      if (deck()[card] == current_player_ && can_play(card)) {
         actions.push_back(card);
       }
     }
@@ -624,14 +634,14 @@ class PlayPhase final : public GamePhase {
     // No cards of the leading suit.
     bool has_tarok = false;
     for (Card card = 0; card < kDeckSize; ++card) {
-      if (game_data().deck_[card] == current_player_ &&
+      if (deck()[card] == current_player_ &&
           CardSuit(card) == Suit::kTarok) {
         has_tarok = true;
         break;
       }
     }
     for (Card card = 0; card < kDeckSize; ++card) {
-      if (game_data().deck_[card] != current_player_) continue;
+      if (deck()[card] != current_player_) continue;
       // Must play tarok if has one.
       if (!has_tarok || CardSuit(card) == Suit::kTarok) {
         actions.push_back(card);
@@ -643,11 +653,11 @@ class PlayPhase final : public GamePhase {
   void DoApplyAction(Action action) override {
     SPIEL_CHECK_GE(action, 0);
     SPIEL_CHECK_LT(action, kDeckSize);
-    SPIEL_CHECK_EQ(game_data().deck_[action], current_player_);
+    SPIEL_CHECK_EQ(deck()[action], current_player_);
     SPIEL_CHECK_FALSE(PhaseOver());
 
     // Play the card.
-    game_data().deck_[action] = kCurrentTrick;  // mark as played in round
+    deck()[action] = kCurrentTrick;  // mark as played in round
     trick_cards_.push_back(action);
     if (trick_cards_.size() == kNumPlayers) {
       ResolveTrick();
@@ -677,14 +687,15 @@ class PlayPhase final : public GamePhase {
   std::string ToString() const override {
     return absl::StrCat("Play Phase, round ", round_ + 1, " ",
                         trick_cards_.size(), "/4 cards played", "\n",
-                        DeckToString(game_data().deck_));
+                        DeckToString(deck()));
   }
 
   std::vector<double> Returns() const override {
     if (!PhaseOver()) {
       return std::vector<double>(kNumPlayers, 0.0);
     }
-    const std::array<int, kNumPlayers> scores = CalculateScores(game_data());
+    const std::array<int, kNumPlayers> scores =
+        CalculateScores(game_data_for_scoring());
     std::vector<double> returns;
     returns.reserve(kNumPlayers);
     for (int p = 0; p < kNumPlayers; ++p) {
@@ -710,12 +721,12 @@ class PlayPhase final : public GamePhase {
     trick_caller_ = trick_winner;
     current_player_ = trick_winner;
     for (Card card : trick_cards_) {
-      game_data().deck_[card] = WonCardsLocation(trick_winner);
+      deck()[card] = WonCardsLocation(trick_winner);
     }
     GameData::Trick trick;
     std::copy(trick_cards_.begin(), trick_cards_.end(), trick.begin());
-    game_data().tricks_.push_back(trick);
-    game_data().trick_winners_.push_back(trick_winner);
+    tricks().push_back(trick);
+    trick_winners().push_back(trick_winner);
     trick_cards_.clear();
 
     round_++;
@@ -749,15 +760,15 @@ std::unique_ptr<GamePhase> BiddingPhase::NextPhase() {
   SPIEL_CHECK_TRUE(PhaseOver());
 
   int bidder_count = std::count(has_bid_.begin(), has_bid_.end(), true);
-  game_data().full_bid_ = (bidder_count == 3);  // all three honours bid
-  game_data().winning_bid_ = lowest_bid_;
+  full_bid() = (bidder_count == 3);  // all three honours bid
+  winning_bid() = lowest_bid_;
   return std::make_unique<DealTalonPhase>(std::move(game_data_));
 }
 
 }  // namespace
 
 SetupPhase::SetupPhase() : GamePhase(std::make_unique<GameData>()) {
-  game_data().deck_.fill(kTalon);  // all cards not dealt stay in the talon
+  deck().fill(kTalon);  // all cards not dealt stay in the talon
   player_hands_sizes_.fill(0);
 }
 
@@ -780,10 +791,10 @@ void SetupPhase::DoApplyAction(Action action) {
   SPIEL_CHECK_LT(action, kNumPlayers);
   SPIEL_CHECK_FALSE(PhaseOver());
   if (current_card_ == kPagat) {
-    game_data().pagat_holder_ = action;
+    SetPagatHolder(action);
   }
   // Action is the player ID who receives the next card.
-  game_data().deck_[current_card_] = action;
+  deck()[current_card_] = action;
   player_hands_sizes_[action]++;
   current_card_++;
 }
