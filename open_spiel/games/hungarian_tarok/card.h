@@ -81,21 +81,65 @@ constexpr int CardPointValue(const Card card) {
     }
   }
 }
-typedef std::array<Player, kDeckSize> Deck;
-const Player kTalon = -1;
-const Player kDeclarerSkart = -2;
-const Player kOpponentsSkart = -3;
-const Player kCurrentTrick = -4;
-constexpr Player WonCardsLocation(Player p) { return p + kNumPlayers; }
-constexpr Player WonCardsLocationToPlayer(Player p) {
-  SPIEL_CHECK_GE(p, kNumPlayers);
-  return p - kNumPlayers;
+
+enum class CardLocation {
+  kPlayer0Hand = 0,
+  kPlayer1Hand = 1,
+  kPlayer2Hand = 2,
+  kPlayer3Hand = 3,
+
+  kPlayer0WonCards = 4,
+  kPlayer1WonCards = 5,
+  kPlayer2WonCards = 6,
+  kPlayer3WonCards = 7,
+
+  kTalon = 8,           // Undealt cards in the talon
+  kDeclarerSkart = 9,   // Cards discarded by the declarer
+  kOpponentsSkart = 10, // Cards discarded by opponents
+  kCurrentTrick = 11,   // Cards currently in play on the table
+};
+
+// Deck maps each card to its current location
+typedef std::array<CardLocation, kDeckSize> Deck;
+
+// Helper functions to create CardLocations from Player indices
+constexpr CardLocation PlayerHandLocation(Player p) {
+  SPIEL_CHECK_GE(p, 0);
+  SPIEL_CHECK_LT(p, kNumPlayers);
+  return static_cast<CardLocation>(p);
 }
-constexpr bool IsPlayerHandLocation(Player p) {
-  return p >= 0 && p < kNumPlayers;
+
+constexpr CardLocation PlayerWonCardsLocation(Player p) {
+  SPIEL_CHECK_GE(p, 0);
+  SPIEL_CHECK_LT(p, kNumPlayers);
+  return static_cast<CardLocation>(p + kNumPlayers);
+}
+
+// Helper functions to check location types
+constexpr bool IsPlayerHand(CardLocation loc) {
+  int val = static_cast<int>(loc);
+  return val >= 0 && val < kNumPlayers;
+}
+
+constexpr bool IsWonCards(CardLocation loc) {
+  int val = static_cast<int>(loc);
+  return val >= kNumPlayers && val < 2 * kNumPlayers;
+}
+
+// Helper functions to extract Player from CardLocation
+// These should only be called after checking with IsPlayerHand/IsWonCards
+constexpr Player HandLocationPlayer(CardLocation loc) {
+  SPIEL_CHECK_TRUE(IsPlayerHand(loc));
+  return static_cast<Player>(loc);
+}
+
+constexpr Player WonCardsLocationPlayer(CardLocation loc) {
+  SPIEL_CHECK_TRUE(IsWonCards(loc));
+  return static_cast<Player>(loc) - kNumPlayers;
 }
 std::string DeckToString(const Deck &deck);
 
+std::ostream &operator<<(std::ostream &os, const CardLocation &location);
 std::ostream &operator<<(std::ostream &os, const Suit &suit);
 std::ostream &operator<<(std::ostream &os, const SuitRank &rank);
 

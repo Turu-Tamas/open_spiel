@@ -112,7 +112,7 @@ HungarianTarokState::HungarianTarokState(std::shared_ptr<const Game> game)
   current_phase_ = PhaseType::kSetup;
 
   // Initialize persistent game state.
-  game_data_.deck_.fill(kTalon);
+  game_data_.deck_.fill(CardLocation::kTalon);
   game_data_.pagat_holder_ = -1;
   game_data_.declarer_ = 0;
   game_data_.winning_bid_ = -1;

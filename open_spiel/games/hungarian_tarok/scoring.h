@@ -12,9 +12,11 @@
 namespace open_spiel {
 namespace hungarian_tarok {
 Side CardWinnerSide(const GameData &game_data, Card card) {
-  return game_data.deck_[card] == WonCardsLocation(game_data.declarer_) ||
-                 game_data.partner_ && game_data.deck_[card] ==
-                                           WonCardsLocation(*game_data.partner_)
+  return game_data.deck_[card] ==
+                 PlayerWonCardsLocation(game_data.declarer_) ||
+                 game_data.partner_ &&
+                     game_data.deck_[card] ==
+                         PlayerWonCardsLocation(*game_data.partner_)
              ? Side::kDeclarer
              : Side::kOpponents;
 }
@@ -43,9 +45,12 @@ std::optional<Side> VolatWinnerSide(const GameData &game_data) {
 int DeclarerCardPoints(const GameData &game_data) {
   int points = 0;
   for (Card card = 0; card < kDeckSize; ++card) {
-    Player owner = game_data.deck_[card];
-    if (game_data.player_sides_[owner] == Side::kDeclarer) {
-      points += CardPointValue(card);
+    CardLocation location = game_data.deck_[card];
+    if (IsWonCards(location)) {
+      Player owner = WonCardsLocationPlayer(location);
+      if (game_data.player_sides_[owner] == Side::kDeclarer) {
+        points += CardPointValue(card);
+      }
     }
   }
   return points;
@@ -71,7 +76,8 @@ PagatUltimoResult PagatUltimoWinnerSide(const GameData &game_data) {
   bool pagat_in_last_trick = absl::c_find(game_data.tricks_.back(), kPagat) ==
                              game_data.tricks_.back().end();
   Player trick_winner = game_data.trick_winners_.back();
-  bool pagat_won = game_data.deck_[kPagat] == WonCardsLocation(trick_winner);
+  bool pagat_won =
+      game_data.deck_[kPagat] == PlayerWonCardsLocation(trick_winner);
 
   if (!pagat_in_last_trick) {
     return PagatUltimoResult::kNotInLastTrick;

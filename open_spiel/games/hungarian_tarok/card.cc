@@ -2,6 +2,48 @@
 
 namespace open_spiel {
 namespace hungarian_tarok {
+std::ostream &operator<<(std::ostream &os, const CardLocation &location) {
+  switch (location) {
+  case CardLocation::kPlayer0Hand:
+    os << "Player0Hand";
+    break;
+  case CardLocation::kPlayer1Hand:
+    os << "Player1Hand";
+    break;
+  case CardLocation::kPlayer2Hand:
+    os << "Player2Hand";
+    break;
+  case CardLocation::kPlayer3Hand:
+    os << "Player3Hand";
+    break;
+  case CardLocation::kPlayer0WonCards:
+    os << "Player0WonCards";
+    break;
+  case CardLocation::kPlayer1WonCards:
+    os << "Player1WonCards";
+    break;
+  case CardLocation::kPlayer2WonCards:
+    os << "Player2WonCards";
+    break;
+  case CardLocation::kPlayer3WonCards:
+    os << "Player3WonCards";
+    break;
+  case CardLocation::kTalon:
+    os << "Talon";
+    break;
+  case CardLocation::kDeclarerSkart:
+    os << "DeclarerSkart";
+    break;
+  case CardLocation::kOpponentsSkart:
+    os << "OpponentsSkart";
+    break;
+  case CardLocation::kCurrentTrick:
+    os << "CurrentTrick";
+    break;
+  }
+  return os;
+}
+
 std::ostream &operator<<(std::ostream &os, const Suit &suit) {
   switch (suit) {
   case Suit::kHearts:
@@ -135,7 +177,7 @@ std::string DeckToString(const Deck &deck) {
     int count = 0;
     ss << "Player " << p << " hand: ";
     for (Card card = 0; card < kDeckSize; ++card) {
-      if (deck[card] == p) {
+      if (deck[card] == PlayerHandLocation(p)) {
         count++;
         ss << CardToString(card) << "; ";
       }

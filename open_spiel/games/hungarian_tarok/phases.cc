@@ -251,7 +251,7 @@ void HungarianTarokState::SetupDoApplyAction(Action action) {
   }
 
   // Action is the player ID who receives the next card.
-  game_data_.deck_[setup_.current_card] = action;
+  game_data_.deck_[setup_.current_card] = PlayerHandLocation(action);
   setup_.player_hands_sizes[action]++;
   setup_.current_card++;
 }
@@ -284,9 +284,9 @@ void HungarianTarokState::StartBiddingPhase() {
   game_data_.tricks_.clear();
   game_data_.trick_winners_.clear();
 
-  bidding_.has_honour[game_data_.deck_[kSkiz]] = true;
-  bidding_.has_honour[game_data_.deck_[kPagat]] = true;
-  bidding_.has_honour[game_data_.deck_[kXXI]] = true;
+  bidding_.has_honour[HandLocationPlayer(game_data_.deck_[kSkiz])] = true;
+  bidding_.has_honour[HandLocationPlayer(game_data_.deck_[kPagat])] = true;
+  bidding_.has_honour[HandLocationPlayer(game_data_.deck_[kXXI])] = true;
 }
 
 Player HungarianTarokState::BiddingCurrentPlayer() const {
@@ -401,7 +401,7 @@ void HungarianTarokState::StartTalonPhase() {
 
   int index = 0;
   for (Card card = 0; card < kDeckSize; ++card) {
-    if (game_data_.deck_[card] == kTalon) {
+    if (game_data_.deck_[card] == CardLocation::kTalon) {
       talon_.talon_cards[index++] = card;
     }
   }
@@ -430,7 +430,8 @@ void HungarianTarokState::TalonDoApplyAction(Action action) {
   SPIEL_CHECK_FALSE(TalonPhaseOver());
 
   talon_.talon_taken[action] = true;
-  game_data_.deck_[talon_.talon_cards[action]] = talon_.current_player;
+  game_data_.deck_[talon_.talon_cards[action]] =
+      PlayerHandLocation(talon_.current_player);
   talon_.talon_taken_count++;
   talon_.cards_to_take[talon_.current_player]--;
 
@@ -461,9 +462,9 @@ void HungarianTarokState::StartSkartPhase() {
   skart_ = SkartState{};
   skart_.hand_sizes.fill(0);
   for (Card card = 0; card < kDeckSize; ++card) {
-    Player owner = game_data_.deck_[card];
-    if (owner >= 0 && owner < kNumPlayers) {
-      skart_.hand_sizes[owner]++;
+    CardLocation location = game_data_.deck_[card];
+    if (IsPlayerHand(location)) {
+      skart_.hand_sizes[HandLocationPlayer(location)]++;
     }
   }
   skart_.current_player = game_data_.declarer_;
@@ -477,7 +478,7 @@ std::vector<Action> HungarianTarokState::SkartLegalActions() const {
   SPIEL_CHECK_FALSE(SkartPhaseOver());
   std::vector<Action> actions;
   for (Card card = 0; card < kDeckSize; ++card) {
-    if (game_data_.deck_[card] == skart_.current_player) {
+    if (game_data_.deck_[card] == PlayerHandLocation(skart_.current_player)) {
       actions.push_back(card);
     }
   }
@@ -487,13 +488,14 @@ std::vector<Action> HungarianTarokState::SkartLegalActions() const {
 void HungarianTarokState::SkartDoApplyAction(Action action) {
   SPIEL_CHECK_GE(action, 0);
   SPIEL_CHECK_LT(action, kDeckSize);
-  SPIEL_CHECK_EQ(game_data_.deck_[action], skart_.current_player);
+  SPIEL_CHECK_EQ(game_data_.deck_[action],
+                 PlayerHandLocation(skart_.current_player));
   SPIEL_CHECK_FALSE(SkartPhaseOver());
 
   if (skart_.current_player == game_data_.declarer_) {
-    game_data_.deck_[action] = kDeclarerSkart;
+    game_data_.deck_[action] = CardLocation::kDeclarerSkart;
   } else {
-    game_data_.deck_[action] = kOpponentsSkart;
+    game_data_.deck_[action] = CardLocation::kOpponentsSkart;
   }
   skart_.cards_discarded++;
 
@@ -529,9 +531,9 @@ void HungarianTarokState::StartAnnouncementsPhase() {
   announcements_.tarok_counts.fill(0);
   for (Card card = 0; card < kDeckSize; ++card) {
     if (CardSuit(card) == Suit::kTarok) {
-      Player owner = game_data_.deck_[card];
-      if (owner >= 0 && owner < kNumPlayers) {
-        announcements_.tarok_counts[owner]++;
+      CardLocation location = game_data_.deck_[card];
+      if (IsPlayerHand(location)) {
+        announcements_.tarok_counts[HandLocationPlayer(location)]++;
       }
     }
   }
@@ -584,18 +586,23 @@ bool HungarianTarokState::CanAnnounceTuletroa() const {
   if (game_data_.full_bid_ &&
       announcements_.current_player == game_data_.declarer_ &&
       announcements_.first_round) {
-    return game_data_.deck_[kSkiz] == game_data_.declarer_;
+    return game_data_.deck_[kSkiz] ==
+           PlayerHandLocation(game_data_.declarer_);
   }
   if (announcements_.current_player == game_data_.declarer_ &&
       announcements_.first_round) {
-    return game_data_.deck_[kXXI] == game_data_.declarer_ &&
-           game_data_.deck_[kSkiz] == game_data_.declarer_;
+    return game_data_.deck_[kXXI] ==
+               PlayerHandLocation(game_data_.declarer_) &&
+           game_data_.deck_[kSkiz] ==
+               PlayerHandLocation(game_data_.declarer_);
   }
   if (game_data_.partner_.has_value() &&
       announcements_.current_player == *game_data_.partner_ &&
       announcements_.first_round) {
-    return game_data_.deck_[kXXI] == *game_data_.partner_ ||
-           game_data_.deck_[kSkiz] == *game_data_.partner_;
+    return game_data_.deck_[kXXI] ==
+               PlayerHandLocation(*game_data_.partner_) ||
+           game_data_.deck_[kSkiz] ==
+               PlayerHandLocation(*game_data_.partner_);
   }
   return true;
 }
@@ -603,7 +610,8 @@ bool HungarianTarokState::CanAnnounceTuletroa() const {
 std::vector<Action> HungarianTarokState::AnnouncementsLegalActions() const {
   SPIEL_CHECK_FALSE(AnnouncementsPhaseOver());
   if (!announcements_.partner_called) {
-    if (game_data_.deck_[MakeTarok(20)] == game_data_.declarer_) {
+    if (game_data_.deck_[MakeTarok(20)] ==
+        PlayerHandLocation(game_data_.declarer_)) {
       return {kAnnouncementsActionCallPartner, kAnnouncementsActionCallSelf};
     }
     return {kAnnouncementsActionCallPartner};
@@ -673,11 +681,13 @@ void HungarianTarokState::AnnouncementsCallPartner(Action action) {
   if (action == kAnnouncementsActionCallPartner) {
     for (int rank = 20; rank >= 1; --rank) {
       Card card = MakeTarok(rank);
-      if (game_data_.deck_[card] != game_data_.declarer_) {
-        Player location = game_data_.deck_[card];
-        game_data_.partner_ = IsPlayerHandLocation(location)
-                                  ? std::optional<Player>(location)
-                                  : std::nullopt;
+      if (game_data_.deck_[card] !=
+          PlayerHandLocation(game_data_.declarer_)) {
+        CardLocation location = game_data_.deck_[card];
+        game_data_.partner_ =
+            IsPlayerHand(location)
+                ? std::optional<Player>(HandLocationPlayer(location))
+                : std::nullopt;
         break;
       }
     }
@@ -831,8 +841,9 @@ std::vector<Action> HungarianTarokState::PlayLegalActions() const {
     return play_.trick_cards.empty() ||
            CardSuit(play_.trick_cards.front()) == CardSuit(card);
   };
+  CardLocation current_player_hand = PlayerHandLocation(play_.current_player);
   for (Card card = 0; card < kDeckSize; ++card) {
-    if (game_data_.deck_[card] == play_.current_player && can_play(card)) {
+    if (game_data_.deck_[card] == current_player_hand && can_play(card)) {
       actions.push_back(card);
     }
   }
@@ -841,14 +852,14 @@ std::vector<Action> HungarianTarokState::PlayLegalActions() const {
 
   bool has_tarok = false;
   for (Card card = 0; card < kDeckSize; ++card) {
-    if (game_data_.deck_[card] == play_.current_player &&
+    if (game_data_.deck_[card] == current_player_hand &&
         CardSuit(card) == Suit::kTarok) {
       has_tarok = true;
       break;
     }
   }
   for (Card card = 0; card < kDeckSize; ++card) {
-    if (game_data_.deck_[card] != play_.current_player)
+    if (game_data_.deck_[card] != current_player_hand)
       continue;
     if (!has_tarok || CardSuit(card) == Suit::kTarok) {
       actions.push_back(card);
@@ -860,10 +871,11 @@ std::vector<Action> HungarianTarokState::PlayLegalActions() const {
 void HungarianTarokState::PlayDoApplyAction(Action action) {
   SPIEL_CHECK_GE(action, 0);
   SPIEL_CHECK_LT(action, kDeckSize);
-  SPIEL_CHECK_EQ(game_data_.deck_[action], play_.current_player);
+  SPIEL_CHECK_EQ(game_data_.deck_[action],
+                 PlayerHandLocation(play_.current_player));
   SPIEL_CHECK_FALSE(PlayPhaseOver());
 
-  game_data_.deck_[action] = kCurrentTrick;
+  game_data_.deck_[action] = CardLocation::kCurrentTrick;
   play_.trick_cards.push_back(action);
   if (play_.trick_cards.size() == kNumPlayers) {
     ResolveTrick();
@@ -888,7 +900,7 @@ void HungarianTarokState::ResolveTrick() {
   play_.trick_caller = trick_winner;
   play_.current_player = trick_winner;
   for (Card card : play_.trick_cards) {
-    game_data_.deck_[card] = WonCardsLocation(trick_winner);
+    game_data_.deck_[card] = PlayerWonCardsLocation(trick_winner);
   }
 
   GameData::Trick trick;
