@@ -78,8 +78,8 @@ class HungarianTarokGame : public Game {
   std::unique_ptr<State> NewInitialState() const override;
   int MaxChanceOutcomes() const override { return kDeckSize; }
   int NumPlayers() const override;
-  double MinUtility() const override { return -1000; }
-  double MaxUtility() const override { return +1000; }
+  double MinUtility() const override { return -15000; }
+  double MaxUtility() const override { return +15000; }
   absl::optional<double> UtilitySum() const override { return 0; }
   std::vector<int> ObservationTensorShape() const override;
   int MaxGameLength() const override;

@@ -222,15 +222,19 @@ std::array<int, kNumPlayers> CalculateScores(const GameData& game_data) {
   }
 
   // declarer played alone, everyone pays/gets paid by them
+  int opponents_score = -declarer_score;
   if (!game_data.partner_.has_value()) {
     declarer_score *= 3;
   }
   std::array<int, kNumPlayers> scores;
   scores.fill(0);
-  for (int player = 0; player < kNumPlayers; ++player) {
+  for (Player player = 0; player < kNumPlayers; ++player) {
+    if (player == game_data.partner_) {
+      SPIEL_CHECK_TRUE(game_data.player_sides_[player] == Side::kDeclarer);
+    }
     scores[player] = (game_data.player_sides_[player] == Side::kDeclarer)
                          ? declarer_score
-                         : -declarer_score;
+                         : opponents_score;
   }
   return scores;
 }

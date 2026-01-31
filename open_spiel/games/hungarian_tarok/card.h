@@ -88,6 +88,9 @@ constexpr Player WonCardsLocationToPlayer(Player p) {
   SPIEL_CHECK_GE(p, kNumPlayers);
   return p - kNumPlayers;
 }
+constexpr bool IsPlayerHandLocation(Player p) {
+  return p >= 0 && p < kNumPlayers;
+}
 std::string DeckToString(const Deck& deck);
 
 std::ostream& operator<<(std::ostream& os, const Suit& suit);

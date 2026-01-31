@@ -418,16 +418,26 @@ class AnnouncementsPhase final : public GamePhase {
         for (int rank = 20; rank >= 1; --rank) {
           Card card = MakeTarok(rank);
           if (game_data().deck_[card] != game_data().declarer_) {
-            game_data().partner_ = game_data().deck_[card];
+            // the card my have been discarded to skart
+            game_data().partner_ = IsPlayerHandLocation(game_data().deck_[card]) ? std::optional<Player>(game_data().deck_[card]) : std::nullopt;
             break;
           }
         }
-        SPIEL_CHECK_TRUE(game_data().partner_.has_value());
-      }  // else partner = std::nullopt
+      }  else {
+        game_data().partner_ = std::nullopt;
+      }
+
       partner_called_ = true;
       // Next player is the player after declarer.
       current_player_ = (game_data().declarer_ + 1) % kNumPlayers;
       last_to_speak_ = game_data().declarer_;
+
+      for (Player p = 0; p < kNumPlayers; ++p) {
+        game_data().player_sides_[p] =
+            (p == game_data().declarer_ || p == game_data().partner_)
+                ? Side::kDeclarer
+                : Side::kOpponents;
+      }
       return;
     }
 
@@ -534,8 +544,7 @@ class AnnouncementsPhase final : public GamePhase {
 
  private:
   bool IsDeclarerSidePlayer(Player player) const {
-    if (player == game_data().declarer_) return true;
-    return game_data().partner_.has_value() && player == *game_data().partner_;
+    return player == game_data().partner_ || player == game_data().declarer_;
   }
 
   GameData::AnnouncementSide& CurrentSide() {
