@@ -39,9 +39,9 @@ enum ActionType : Action { kPass = 0 };
 class HungarianTarokGame;
 
 class HungarianTarokState : public State {
-public:
+ public:
   explicit HungarianTarokState(std::shared_ptr<const Game> game);
-  HungarianTarokState(const HungarianTarokState &other);
+  HungarianTarokState(const HungarianTarokState& other);
 
   Player CurrentPlayer() const override;
   std::string ActionToString(Player player, Action move) const override;
@@ -59,12 +59,12 @@ public:
 
   PhaseType GetPhaseType() const { return current_phase_; }
 
-  const GameData &game_data() const { return game_data_; }
+  std::vector<Card> PlayerHand(Player player) const;
 
-protected:
+ protected:
   void DoApplyAction(Action move) override;
 
-private:
+ private:
   // Phase dispatch.
   Player PhaseCurrentPlayer() const;
   std::vector<Action> PhaseLegalActions() const;
@@ -104,6 +104,9 @@ private:
   std::string TalonActionToString(Player player, Action action) const;
   std::string TalonToString() const;
   void StartTalonPhase();
+  bool TrialThreeGameEnded(); // private helper
+  std::vector<double> TalonReturns() const;
+  bool TalonGameOver() const;
 
   // Skart.
   Player SkartCurrentPlayer() const;
@@ -124,10 +127,10 @@ private:
   void StartAnnouncementsPhase();
   void AnnouncementsCallPartner(Action action);
   bool IsDeclarerSidePlayer(Player player) const;
-  GameData::AnnouncementSide &CurrentAnnouncementSide();
-  GameData::AnnouncementSide &OtherAnnouncementSide();
-  const GameData::AnnouncementSide &CurrentAnnouncementSide() const;
-  const GameData::AnnouncementSide &OtherAnnouncementSide() const;
+  CommonState::AnnouncementSide& CurrentAnnouncementSide();
+  CommonState::AnnouncementSide& OtherAnnouncementSide();
+  const CommonState::AnnouncementSide& CurrentAnnouncementSide() const;
+  const CommonState::AnnouncementSide& OtherAnnouncementSide() const;
   bool CanAnnounceTuletroa() const;
 
   // Play.
@@ -143,7 +146,7 @@ private:
   void ResolveTrick();
 
   // Persistent game data.
-  GameData game_data_{};
+  CommonState common_state_{};
   PhaseType current_phase_ = PhaseType::kSetup;
 
   // Per-phase state.
@@ -163,11 +166,13 @@ private:
   } bidding_;
 
   struct TalonState {
-    Player current_player = 0; // the current player receiving a card
+    Player current_player = 0;  // the current player receiving a card
     std::array<Card, kTalonSize> talon_cards{};
     std::array<bool, kTalonSize> talon_taken{};
     std::array<int, kNumPlayers> cards_to_take{};
     int talon_taken_count = 0;
+    std::vector<double> rewards = {0.0, 0.0, 0.0, 0.0};
+    bool game_over = false;
   } talon_;
 
   struct SkartState {
@@ -193,8 +198,8 @@ private:
 };
 
 class HungarianTarokGame : public Game {
-public:
-  explicit HungarianTarokGame(const GameParameters &params);
+ public:
+  explicit HungarianTarokGame(const GameParameters& params);
 
   int NumDistinctActions() const override { return kDeckSize; }
   std::unique_ptr<State> NewInitialState() const override;
@@ -208,14 +213,14 @@ public:
 
   std::string ActionToString(Player player, Action action) const override;
 
-  std::shared_ptr<Observer>
-  MakeObserver(absl::optional<IIGObservationType> iig_obs_type,
-               const GameParameters &params) const override;
+  std::shared_ptr<Observer> MakeObserver(
+      absl::optional<IIGObservationType> iig_obs_type,
+      const GameParameters& params) const override;
 
-private:
+ private:
 };
 
-} // namespace hungarian_tarok
-} // namespace open_spiel
+}  // namespace hungarian_tarok
+}  // namespace open_spiel
 
-#endif // OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_H_
+#endif  // OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_H_

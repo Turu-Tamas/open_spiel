@@ -1,5 +1,3 @@
-#include "open_spiel/games/hungarian_tarok/hungarian_tarok.h"
-
 #include <algorithm>
 #include <array>
 #include <string>
@@ -8,185 +6,142 @@
 
 #include "open_spiel/abseil-cpp/absl/algorithm/container.h"
 #include "open_spiel/abseil-cpp/absl/strings/str_cat.h"
+#include "open_spiel/games/hungarian_tarok/hungarian_tarok.h"
 #include "open_spiel/games/hungarian_tarok/scoring.h"
 
 namespace open_spiel {
 namespace hungarian_tarok {
 
-namespace {
-
-constexpr Action kBiddingActionPass = 0;
-constexpr Action kBiddingActionStandardBid = 1;
-
-constexpr Action kAnnouncementsActionCallPartner = 0;
-constexpr Action kAnnouncementsActionCallSelf = 1;
-
-constexpr int kMaxContraLevel = 5;
-
-struct AnnouncementAction {
-  AnnouncementType type;
-  enum class Level {
-    kAnnounce = 0,
-    kContra = 1,
-    kReContra = 2,
-  } level;
-
-  static constexpr AnnouncementAction FromAction(Action action) {
-    SPIEL_CHECK_GE(action, 0);
-    SPIEL_CHECK_LT(action, kNumAnnouncementTypes * 3);
-    Level level = static_cast<Level>(action / kNumAnnouncementTypes);
-    AnnouncementType type =
-        static_cast<AnnouncementType>(action % kNumAnnouncementTypes);
-    return AnnouncementAction{type, level};
-  }
-
-  constexpr Action ToAction() const {
-    return static_cast<Action>(static_cast<int>(level) * kNumAnnouncementTypes +
-                               static_cast<int>(type));
-  }
-
-  static constexpr Action AnnounceAction(AnnouncementType type) {
-    return AnnouncementAction{type, Level::kAnnounce}.ToAction();
-  }
-  static constexpr Action ContraAction(AnnouncementType type) {
-    return AnnouncementAction{type, Level::kContra}.ToAction();
-  }
-  static constexpr Action ReContraAction(AnnouncementType type) {
-    return AnnouncementAction{type, Level::kReContra}.ToAction();
-  }
-  static constexpr Action PassAction() {
-    return kNumAnnouncementTypes * 3; // special action for passing
-  }
-};
-
-} // namespace
-
 // Generic phase dispatch.
 Player HungarianTarokState::PhaseCurrentPlayer() const {
   switch (current_phase_) {
-  case PhaseType::kSetup:
-    return SetupCurrentPlayer();
-  case PhaseType::kBidding:
-    return BiddingCurrentPlayer();
-  case PhaseType::kTalon:
-    return TalonCurrentPlayer();
-  case PhaseType::kSkart:
-    return SkartCurrentPlayer();
-  case PhaseType::kAnnouncements:
-    return AnnouncementsCurrentPlayer();
-  case PhaseType::kPlay:
-    return PlayCurrentPlayer();
+    case PhaseType::kSetup:
+      return SetupCurrentPlayer();
+    case PhaseType::kBidding:
+      return BiddingCurrentPlayer();
+    case PhaseType::kTalon:
+      return TalonCurrentPlayer();
+    case PhaseType::kSkart:
+      return SkartCurrentPlayer();
+    case PhaseType::kAnnouncements:
+      return AnnouncementsCurrentPlayer();
+    case PhaseType::kPlay:
+      return PlayCurrentPlayer();
   }
   SpielFatalError("Unknown phase type");
 }
 
 std::vector<Action> HungarianTarokState::PhaseLegalActions() const {
   switch (current_phase_) {
-  case PhaseType::kSetup:
-    return SetupLegalActions();
-  case PhaseType::kBidding:
-    return BiddingLegalActions();
-  case PhaseType::kTalon:
-    return TalonLegalActions();
-  case PhaseType::kSkart:
-    return SkartLegalActions();
-  case PhaseType::kAnnouncements:
-    return AnnouncementsLegalActions();
-  case PhaseType::kPlay:
-    return PlayLegalActions();
+    case PhaseType::kSetup:
+      return SetupLegalActions();
+    case PhaseType::kBidding:
+      return BiddingLegalActions();
+    case PhaseType::kTalon:
+      return TalonLegalActions();
+    case PhaseType::kSkart:
+      return SkartLegalActions();
+    case PhaseType::kAnnouncements:
+      return AnnouncementsLegalActions();
+    case PhaseType::kPlay:
+      return PlayLegalActions();
   }
   SpielFatalError("Unknown phase type");
 }
 
 void HungarianTarokState::PhaseDoApplyAction(Action action) {
   switch (current_phase_) {
-  case PhaseType::kSetup:
-    return SetupDoApplyAction(action);
-  case PhaseType::kBidding:
-    return BiddingDoApplyAction(action);
-  case PhaseType::kTalon:
-    return TalonDoApplyAction(action);
-  case PhaseType::kSkart:
-    return SkartDoApplyAction(action);
-  case PhaseType::kAnnouncements:
-    return AnnouncementsDoApplyAction(action);
-  case PhaseType::kPlay:
-    return PlayDoApplyAction(action);
+    case PhaseType::kSetup:
+      return SetupDoApplyAction(action);
+    case PhaseType::kBidding:
+      return BiddingDoApplyAction(action);
+    case PhaseType::kTalon:
+      return TalonDoApplyAction(action);
+    case PhaseType::kSkart:
+      return SkartDoApplyAction(action);
+    case PhaseType::kAnnouncements:
+      return AnnouncementsDoApplyAction(action);
+    case PhaseType::kPlay:
+      return PlayDoApplyAction(action);
   }
   SpielFatalError("Unknown phase type");
 }
 
 bool HungarianTarokState::PhaseOver() const {
   switch (current_phase_) {
-  case PhaseType::kSetup:
-    return SetupPhaseOver();
-  case PhaseType::kBidding:
-    return BiddingPhaseOver();
-  case PhaseType::kTalon:
-    return TalonPhaseOver();
-  case PhaseType::kSkart:
-    return SkartPhaseOver();
-  case PhaseType::kAnnouncements:
-    return AnnouncementsPhaseOver();
-  case PhaseType::kPlay:
-    return PlayPhaseOver();
+    case PhaseType::kSetup:
+      return SetupPhaseOver();
+    case PhaseType::kBidding:
+      return BiddingPhaseOver();
+    case PhaseType::kTalon:
+      return TalonPhaseOver();
+    case PhaseType::kSkart:
+      return SkartPhaseOver();
+    case PhaseType::kAnnouncements:
+      return AnnouncementsPhaseOver();
+    case PhaseType::kPlay:
+      return PlayPhaseOver();
   }
   SpielFatalError("Unknown phase type");
 }
 
 bool HungarianTarokState::GameOver() const {
   switch (current_phase_) {
-  case PhaseType::kBidding:
-    return BiddingGameOver();
-  case PhaseType::kPlay:
-    return PlayGameOver();
-  default:
-    return false;
+    case PhaseType::kBidding:
+      return BiddingGameOver();
+    case PhaseType::kPlay:
+      return PlayGameOver();
+    case PhaseType::kTalon:
+      return TalonGameOver();
+    default:
+      return false;
   }
 }
 
 std::vector<double> HungarianTarokState::PhaseReturns() const {
   switch (current_phase_) {
-  case PhaseType::kPlay:
-    return PlayReturns();
-  default:
-    return std::vector<double>(kNumPlayers, 0.0);
+    case PhaseType::kPlay:
+      return PlayReturns();
+    case PhaseType::kTalon:
+      return TalonReturns();  // for trial three ending
+    default:
+      return std::vector<double>(kNumPlayers, 0.0);
   }
 }
 
 std::string HungarianTarokState::PhaseActionToString(Player player,
                                                      Action action) const {
   switch (current_phase_) {
-  case PhaseType::kSetup:
-    return SetupActionToString(player, action);
-  case PhaseType::kBidding:
-    return BiddingActionToString(player, action);
-  case PhaseType::kTalon:
-    return TalonActionToString(player, action);
-  case PhaseType::kSkart:
-    return SkartActionToString(player, action);
-  case PhaseType::kAnnouncements:
-    return AnnouncementsActionToString(player, action);
-  case PhaseType::kPlay:
-    return PlayActionToString(player, action);
+    case PhaseType::kSetup:
+      return SetupActionToString(player, action);
+    case PhaseType::kBidding:
+      return BiddingActionToString(player, action);
+    case PhaseType::kTalon:
+      return TalonActionToString(player, action);
+    case PhaseType::kSkart:
+      return SkartActionToString(player, action);
+    case PhaseType::kAnnouncements:
+      return AnnouncementsActionToString(player, action);
+    case PhaseType::kPlay:
+      return PlayActionToString(player, action);
   }
   SpielFatalError("Unknown phase type");
 }
 
 std::string HungarianTarokState::PhaseToString() const {
   switch (current_phase_) {
-  case PhaseType::kSetup:
-    return SetupToString();
-  case PhaseType::kBidding:
-    return BiddingToString();
-  case PhaseType::kTalon:
-    return TalonToString();
-  case PhaseType::kSkart:
-    return SkartToString();
-  case PhaseType::kAnnouncements:
-    return AnnouncementsToString();
-  case PhaseType::kPlay:
-    return PlayToString();
+    case PhaseType::kSetup:
+      return SetupToString();
+    case PhaseType::kBidding:
+      return BiddingToString();
+    case PhaseType::kTalon:
+      return TalonToString();
+    case PhaseType::kSkart:
+      return SkartToString();
+    case PhaseType::kAnnouncements:
+      return AnnouncementsToString();
+    case PhaseType::kPlay:
+      return PlayToString();
   }
   SpielFatalError("Unknown phase type");
 }
@@ -194,33 +149,33 @@ std::string HungarianTarokState::PhaseToString() const {
 void HungarianTarokState::AdvancePhase() {
   SPIEL_CHECK_TRUE(PhaseOver());
   switch (current_phase_) {
-  case PhaseType::kSetup:
-    current_phase_ = PhaseType::kBidding;
-    StartBiddingPhase();
-    return;
-  case PhaseType::kBidding: {
-    int bidder_count = static_cast<int>(
-        std::count(bidding_.has_bid.begin(), bidding_.has_bid.end(), true));
-    game_data_.full_bid_ = (bidder_count == 3);
-    game_data_.winning_bid_ = bidding_.lowest_bid;
-    current_phase_ = PhaseType::kTalon;
-    StartTalonPhase();
-    return;
-  }
-  case PhaseType::kTalon:
-    current_phase_ = PhaseType::kSkart;
-    StartSkartPhase();
-    return;
-  case PhaseType::kSkart:
-    current_phase_ = PhaseType::kAnnouncements;
-    StartAnnouncementsPhase();
-    return;
-  case PhaseType::kAnnouncements:
-    current_phase_ = PhaseType::kPlay;
-    StartPlayPhase();
-    return;
-  case PhaseType::kPlay:
-    SpielFatalError("No next phase after play");
+    case PhaseType::kSetup:
+      current_phase_ = PhaseType::kBidding;
+      StartBiddingPhase();
+      return;
+    case PhaseType::kBidding: {
+      int bidder_count = static_cast<int>(
+          std::count(bidding_.has_bid.begin(), bidding_.has_bid.end(), true));
+      common_state_.full_bid_ = (bidder_count == 3);
+      common_state_.winning_bid_ = bidding_.lowest_bid;
+      current_phase_ = PhaseType::kTalon;
+      StartTalonPhase();
+      return;
+    }
+    case PhaseType::kTalon:
+      current_phase_ = PhaseType::kSkart;
+      StartSkartPhase();
+      return;
+    case PhaseType::kSkart:
+      current_phase_ = PhaseType::kAnnouncements;
+      StartAnnouncementsPhase();
+      return;
+    case PhaseType::kAnnouncements:
+      current_phase_ = PhaseType::kPlay;
+      StartPlayPhase();
+      return;
+    case PhaseType::kPlay:
+      SpielFatalError("No next phase after play");
   }
   SpielFatalError("Unknown phase type");
 }
@@ -247,11 +202,11 @@ void HungarianTarokState::SetupDoApplyAction(Action action) {
   SPIEL_CHECK_FALSE(SetupPhaseOver());
 
   if (setup_.current_card == kPagat) {
-    game_data_.pagat_holder_ = action;
+    common_state_.pagat_holder_ = action;
   }
 
   // Action is the player ID who receives the next card.
-  game_data_.deck_[setup_.current_card] = PlayerHandLocation(action);
+  common_state_.deck_[setup_.current_card] = PlayerHandLocation(action);
   setup_.player_hands_sizes[action]++;
   setup_.current_card++;
 }
@@ -274,19 +229,19 @@ std::string HungarianTarokState::SetupToString() const { return "Setup Phase"; }
 void HungarianTarokState::StartBiddingPhase() {
   bidding_ = BiddingState{};
 
-  game_data_.declarer_ = 0;
-  game_data_.winning_bid_ = -1;
-  game_data_.full_bid_ = false;
-  game_data_.partner_ = std::nullopt;
-  game_data_.declarer_side_ = GameData::AnnouncementSide{};
-  game_data_.opponents_side_ = GameData::AnnouncementSide{};
-  game_data_.player_sides_.fill(Side::kOpponents);
-  game_data_.tricks_.clear();
-  game_data_.trick_winners_.clear();
+  common_state_.declarer_ = 0;
+  common_state_.winning_bid_ = -1;
+  common_state_.full_bid_ = false;
+  common_state_.partner_ = std::nullopt;
+  common_state_.declarer_side_ = CommonState::AnnouncementSide{};
+  common_state_.opponents_side_ = CommonState::AnnouncementSide{};
+  common_state_.player_sides_.fill(Side::kOpponents);
+  common_state_.tricks_.clear();
+  common_state_.trick_winners_.clear();
 
-  bidding_.has_honour[HandLocationPlayer(game_data_.deck_[kSkiz])] = true;
-  bidding_.has_honour[HandLocationPlayer(game_data_.deck_[kPagat])] = true;
-  bidding_.has_honour[HandLocationPlayer(game_data_.deck_[kXXI])] = true;
+  bidding_.has_honour[HandLocationPlayer(common_state_.deck_[kSkiz])] = true;
+  bidding_.has_honour[HandLocationPlayer(common_state_.deck_[kPagat])] = true;
+  bidding_.has_honour[HandLocationPlayer(common_state_.deck_[kXXI])] = true;
 }
 
 Player HungarianTarokState::BiddingCurrentPlayer() const {
@@ -296,6 +251,9 @@ Player HungarianTarokState::BiddingCurrentPlayer() const {
 std::vector<Action> HungarianTarokState::BiddingLegalActions() const {
   SPIEL_CHECK_FALSE(BiddingPhaseOver());
   if (!bidding_.has_honour[bidding_.current_player]) {
+    if (bidding_.lowest_bid == 4 && bidding_.current_player == 3) {
+      return {kBiddingActionPass, kBiddingActionStandardBid};
+    }
     return {kBiddingActionPass};
   }
   return {kBiddingActionPass, kBiddingActionStandardBid};
@@ -307,6 +265,11 @@ void HungarianTarokState::BiddingDoApplyAction(Action action) {
   SPIEL_CHECK_TRUE(absl::c_find(legal_actions, action) != legal_actions.end());
 
   if (action == kBiddingActionStandardBid) {
+    if (!bidding_.has_honour[bidding_.current_player] &&
+        bidding_.lowest_bid == 4 && bidding_.current_player == 3) {
+      // Special case: last player can bid 3 even without an honour.
+      common_state_.trial_three_ = true;
+    }
     // No holding as first bid.
     if (!bidding_.was_held && bidding_.has_bid[bidding_.current_player]) {
       bidding_.was_held = true;
@@ -314,7 +277,7 @@ void HungarianTarokState::BiddingDoApplyAction(Action action) {
       bidding_.lowest_bid -= 1;
       bidding_.was_held = false;
     }
-    game_data_.declarer_ = bidding_.current_player;
+    common_state_.declarer_ = bidding_.current_player;
     bidding_.has_bid[bidding_.current_player] = true;
   } else if (action == kBiddingActionPass) {
     bidding_.has_passed[bidding_.current_player] = true;
@@ -333,7 +296,7 @@ void HungarianTarokState::BiddingNextPlayer() {
          next_player != bidding_.current_player) {
     next_player = (next_player + 1) % kNumPlayers;
   }
-  if (next_player == game_data_.declarer_) {
+  if (next_player == common_state_.declarer_) {
     bidding_.current_player = kTerminalPlayerId;
     return;
   }
@@ -341,8 +304,8 @@ void HungarianTarokState::BiddingNextPlayer() {
     // Everyone passed.
     bidding_.current_player = kTerminalPlayerId;
     bidding_.all_passed = true;
-    game_data_.declarer_ = -1;
-    game_data_.winning_bid_ = -1;
+    common_state_.declarer_ = -1;
+    common_state_.winning_bid_ = -1;
     return;
   }
   bidding_.current_player = next_player;
@@ -382,8 +345,8 @@ std::string HungarianTarokState::BiddingToString() const {
 void HungarianTarokState::StartTalonPhase() {
   talon_ = TalonState{};
 
-  const Player declarer = game_data_.declarer_;
-  const int declarer_cards_to_take = game_data_.winning_bid_;
+  const Player declarer = common_state_.declarer_;
+  const int declarer_cards_to_take = common_state_.winning_bid_;
 
   talon_.cards_to_take.fill(0);
   talon_.cards_to_take[declarer] = declarer_cards_to_take;
@@ -401,7 +364,7 @@ void HungarianTarokState::StartTalonPhase() {
 
   int index = 0;
   for (Card card = 0; card < kDeckSize; ++card) {
-    if (game_data_.deck_[card] == CardLocation::kTalon) {
+    if (common_state_.deck_[card] == CardLocation::kTalon) {
       talon_.talon_cards[index++] = card;
     }
   }
@@ -423,6 +386,25 @@ std::vector<Action> HungarianTarokState::TalonLegalActions() const {
   return actions;
 }
 
+bool HungarianTarokState::TrialThreeGameEnded() {
+  if (talon_.current_player == common_state_.declarer_ &&
+      common_state_.trial_three_) {
+    // trial three
+    if (common_state_.deck_[kPagat] ==
+            PlayerHandLocation(talon_.current_player) ||
+        common_state_.deck_[kSkiz] ==
+            PlayerHandLocation(talon_.current_player) ||
+        common_state_.deck_[kXXI] ==
+            PlayerHandLocation(talon_.current_player)) {
+      // declarer took an honour, continue
+      return false;
+    } else {
+      return true;
+    }
+  }
+  return false;
+}
+
 void HungarianTarokState::TalonDoApplyAction(Action action) {
   SPIEL_CHECK_GE(action, 0);
   SPIEL_CHECK_LT(action, kTalonSize);
@@ -430,7 +412,7 @@ void HungarianTarokState::TalonDoApplyAction(Action action) {
   SPIEL_CHECK_FALSE(TalonPhaseOver());
 
   talon_.talon_taken[action] = true;
-  game_data_.deck_[talon_.talon_cards[action]] =
+  common_state_.deck_[talon_.talon_cards[action]] =
       PlayerHandLocation(talon_.current_player);
   talon_.talon_taken_count++;
   talon_.cards_to_take[talon_.current_player]--;
@@ -438,8 +420,23 @@ void HungarianTarokState::TalonDoApplyAction(Action action) {
   if (talon_.talon_taken_count == kTalonSize) {
     talon_.current_player = kTerminalPlayerId;
   } else if (talon_.cards_to_take[talon_.current_player] == 0) {
-    talon_.current_player = (talon_.current_player + 1) % kNumPlayers;
+    if (TrialThreeGameEnded()) {
+      talon_.current_player = kTerminalPlayerId;
+      talon_.rewards.assign(kNumPlayers, +3.0);
+      talon_.rewards[common_state_.declarer_] = -9.0;
+      talon_.game_over = true;
+    } else {
+      talon_.current_player = (talon_.current_player + 1) % kNumPlayers;
+    }
   }
+}
+
+std::vector<double> HungarianTarokState::TalonReturns() const {
+  return talon_.rewards;
+}
+
+bool HungarianTarokState::TalonGameOver() const {
+  return talon_.current_player == kTerminalPlayerId && talon_.game_over;
 }
 
 bool HungarianTarokState::TalonPhaseOver() const {
@@ -462,12 +459,12 @@ void HungarianTarokState::StartSkartPhase() {
   skart_ = SkartState{};
   skart_.hand_sizes.fill(0);
   for (Card card = 0; card < kDeckSize; ++card) {
-    CardLocation location = game_data_.deck_[card];
+    CardLocation location = common_state_.deck_[card];
     if (IsPlayerHand(location)) {
       skart_.hand_sizes[HandLocationPlayer(location)]++;
     }
   }
-  skart_.current_player = game_data_.declarer_;
+  skart_.current_player = common_state_.declarer_;
 }
 
 Player HungarianTarokState::SkartCurrentPlayer() const {
@@ -478,7 +475,8 @@ std::vector<Action> HungarianTarokState::SkartLegalActions() const {
   SPIEL_CHECK_FALSE(SkartPhaseOver());
   std::vector<Action> actions;
   for (Card card = 0; card < kDeckSize; ++card) {
-    if (game_data_.deck_[card] == PlayerHandLocation(skart_.current_player)) {
+    if (common_state_.deck_[card] ==
+        PlayerHandLocation(skart_.current_player)) {
       actions.push_back(card);
     }
   }
@@ -488,14 +486,14 @@ std::vector<Action> HungarianTarokState::SkartLegalActions() const {
 void HungarianTarokState::SkartDoApplyAction(Action action) {
   SPIEL_CHECK_GE(action, 0);
   SPIEL_CHECK_LT(action, kDeckSize);
-  SPIEL_CHECK_EQ(game_data_.deck_[action],
+  SPIEL_CHECK_EQ(common_state_.deck_[action],
                  PlayerHandLocation(skart_.current_player));
   SPIEL_CHECK_FALSE(SkartPhaseOver());
 
-  if (skart_.current_player == game_data_.declarer_) {
-    game_data_.deck_[action] = CardLocation::kDeclarerSkart;
+  if (skart_.current_player == common_state_.declarer_) {
+    common_state_.deck_[action] = CardLocation::kDeclarerSkart;
   } else {
-    game_data_.deck_[action] = CardLocation::kOpponentsSkart;
+    common_state_.deck_[action] = CardLocation::kOpponentsSkart;
   }
   skart_.cards_discarded++;
 
@@ -521,17 +519,18 @@ std::string HungarianTarokState::SkartActionToString(Player player,
 
 std::string HungarianTarokState::SkartToString() const {
   return absl::StrCat("Skart Phase, ", skart_.cards_discarded,
-                      "/6 cards discarded\n", DeckToString(game_data_.deck_));
+                      "/6 cards discarded\n",
+                      DeckToString(common_state_.deck_));
 }
 
 // Announcements.
 void HungarianTarokState::StartAnnouncementsPhase() {
   announcements_ = AnnouncementsState{};
-  announcements_.current_player = game_data_.declarer_;
+  announcements_.current_player = common_state_.declarer_;
   announcements_.tarok_counts.fill(0);
   for (Card card = 0; card < kDeckSize; ++card) {
     if (CardSuit(card) == Suit::kTarok) {
-      CardLocation location = game_data_.deck_[card];
+      CardLocation location = common_state_.deck_[card];
       if (IsPlayerHand(location)) {
         announcements_.tarok_counts[HandLocationPlayer(location)]++;
       }
@@ -544,34 +543,35 @@ Player HungarianTarokState::AnnouncementsCurrentPlayer() const {
 }
 
 bool HungarianTarokState::IsDeclarerSidePlayer(Player player) const {
-  return player == game_data_.declarer_ ||
-         (game_data_.partner_.has_value() && player == *game_data_.partner_);
+  return player == common_state_.declarer_ ||
+         (common_state_.partner_.has_value() &&
+          player == *common_state_.partner_);
 }
 
-GameData::AnnouncementSide &HungarianTarokState::CurrentAnnouncementSide() {
+CommonState::AnnouncementSide& HungarianTarokState::CurrentAnnouncementSide() {
   return IsDeclarerSidePlayer(announcements_.current_player)
-             ? game_data_.declarer_side_
-             : game_data_.opponents_side_;
+             ? common_state_.declarer_side_
+             : common_state_.opponents_side_;
 }
 
-GameData::AnnouncementSide &HungarianTarokState::OtherAnnouncementSide() {
+CommonState::AnnouncementSide& HungarianTarokState::OtherAnnouncementSide() {
   return IsDeclarerSidePlayer(announcements_.current_player)
-             ? game_data_.opponents_side_
-             : game_data_.declarer_side_;
+             ? common_state_.opponents_side_
+             : common_state_.declarer_side_;
 }
 
-const GameData::AnnouncementSide &
+const CommonState::AnnouncementSide&
 HungarianTarokState::CurrentAnnouncementSide() const {
   return IsDeclarerSidePlayer(announcements_.current_player)
-             ? game_data_.declarer_side_
-             : game_data_.opponents_side_;
+             ? common_state_.declarer_side_
+             : common_state_.opponents_side_;
 }
 
-const GameData::AnnouncementSide &
+const CommonState::AnnouncementSide&
 HungarianTarokState::OtherAnnouncementSide() const {
   return IsDeclarerSidePlayer(announcements_.current_player)
-             ? game_data_.opponents_side_
-             : game_data_.declarer_side_;
+             ? common_state_.opponents_side_
+             : common_state_.declarer_side_;
 }
 
 bool HungarianTarokState::CanAnnounceTuletroa() const {
@@ -583,26 +583,26 @@ bool HungarianTarokState::CanAnnounceTuletroa() const {
           .announced[static_cast<int>(AnnouncementType::kVolat)]) {
     return false;
   }
-  if (game_data_.full_bid_ &&
-      announcements_.current_player == game_data_.declarer_ &&
+  if (common_state_.full_bid_ &&
+      announcements_.current_player == common_state_.declarer_ &&
       announcements_.first_round) {
-    return game_data_.deck_[kSkiz] ==
-           PlayerHandLocation(game_data_.declarer_);
+    return common_state_.deck_[kSkiz] ==
+           PlayerHandLocation(common_state_.declarer_);
   }
-  if (announcements_.current_player == game_data_.declarer_ &&
+  if (announcements_.current_player == common_state_.declarer_ &&
       announcements_.first_round) {
-    return game_data_.deck_[kXXI] ==
-               PlayerHandLocation(game_data_.declarer_) &&
-           game_data_.deck_[kSkiz] ==
-               PlayerHandLocation(game_data_.declarer_);
+    return common_state_.deck_[kXXI] ==
+               PlayerHandLocation(common_state_.declarer_) &&
+           common_state_.deck_[kSkiz] ==
+               PlayerHandLocation(common_state_.declarer_);
   }
-  if (game_data_.partner_.has_value() &&
-      announcements_.current_player == *game_data_.partner_ &&
+  if (common_state_.partner_.has_value() &&
+      announcements_.current_player == *common_state_.partner_ &&
       announcements_.first_round) {
-    return game_data_.deck_[kXXI] ==
-               PlayerHandLocation(*game_data_.partner_) ||
-           game_data_.deck_[kSkiz] ==
-               PlayerHandLocation(*game_data_.partner_);
+    return common_state_.deck_[kXXI] ==
+               PlayerHandLocation(*common_state_.partner_) ||
+           common_state_.deck_[kSkiz] ==
+               PlayerHandLocation(*common_state_.partner_);
   }
   return true;
 }
@@ -610,46 +610,46 @@ bool HungarianTarokState::CanAnnounceTuletroa() const {
 std::vector<Action> HungarianTarokState::AnnouncementsLegalActions() const {
   SPIEL_CHECK_FALSE(AnnouncementsPhaseOver());
   if (!announcements_.partner_called) {
-    if (game_data_.deck_[MakeTarok(20)] ==
-        PlayerHandLocation(game_data_.declarer_)) {
+    if (common_state_.deck_[MakeTarok(20)] ==
+        PlayerHandLocation(common_state_.declarer_)) {
       return {kAnnouncementsActionCallPartner, kAnnouncementsActionCallSelf};
     }
     return {kAnnouncementsActionCallPartner};
   }
 
   std::vector<Action> actions;
-  const GameData::AnnouncementSide &current_side = CurrentAnnouncementSide();
-  const GameData::AnnouncementSide &other_side = OtherAnnouncementSide();
+  const CommonState::AnnouncementSide& current_side = CurrentAnnouncementSide();
+  const CommonState::AnnouncementSide& other_side = OtherAnnouncementSide();
 
   for (int i = 0; i < kNumAnnouncementTypes; ++i) {
     AnnouncementType type = static_cast<AnnouncementType>(i);
-    if (current_side.announced[i])
-      continue;
+    if (current_side.announced[i]) continue;
 
     switch (type) {
-    case AnnouncementType::kTuletroa:
-      if (CanAnnounceTuletroa()) {
+      case AnnouncementType::kTuletroa:
+        if (CanAnnounceTuletroa()) {
+          actions.push_back(AnnouncementAction::AnnounceAction(type));
+        }
+        break;
+      case AnnouncementType::kEightTaroks:
+        if (announcements_.tarok_counts[announcements_.current_player] == 8) {
+          actions.push_back(AnnouncementAction::AnnounceAction(type));
+        }
+        break;
+      case AnnouncementType::kNineTaroks:
+        if (announcements_.tarok_counts[announcements_.current_player] == 9) {
+          actions.push_back(AnnouncementAction::AnnounceAction(type));
+        }
+        break;
+      case AnnouncementType::kFourKings:
+      case AnnouncementType::kDoubleGame:
+        if (!current_side
+                 .announced[static_cast<int>(AnnouncementType::kVolat)]) {
+          actions.push_back(AnnouncementAction::AnnounceAction(type));
+        }
+        break;
+      default:
         actions.push_back(AnnouncementAction::AnnounceAction(type));
-      }
-      break;
-    case AnnouncementType::kEightTaroks:
-      if (announcements_.tarok_counts[announcements_.current_player] == 8) {
-        actions.push_back(AnnouncementAction::AnnounceAction(type));
-      }
-      break;
-    case AnnouncementType::kNineTaroks:
-      if (announcements_.tarok_counts[announcements_.current_player] == 9) {
-        actions.push_back(AnnouncementAction::AnnounceAction(type));
-      }
-      break;
-    case AnnouncementType::kFourKings:
-    case AnnouncementType::kDoubleGame:
-      if (!current_side.announced[static_cast<int>(AnnouncementType::kVolat)]) {
-        actions.push_back(AnnouncementAction::AnnounceAction(type));
-      }
-      break;
-    default:
-      actions.push_back(AnnouncementAction::AnnounceAction(type));
     }
   }
 
@@ -681,10 +681,10 @@ void HungarianTarokState::AnnouncementsCallPartner(Action action) {
   if (action == kAnnouncementsActionCallPartner) {
     for (int rank = 20; rank >= 1; --rank) {
       Card card = MakeTarok(rank);
-      if (game_data_.deck_[card] !=
-          PlayerHandLocation(game_data_.declarer_)) {
-        CardLocation location = game_data_.deck_[card];
-        game_data_.partner_ =
+      if (common_state_.deck_[card] !=
+          PlayerHandLocation(common_state_.declarer_)) {
+        CardLocation location = common_state_.deck_[card];
+        common_state_.partner_ =
             IsPlayerHand(location)
                 ? std::optional<Player>(HandLocationPlayer(location))
                 : std::nullopt;
@@ -692,16 +692,16 @@ void HungarianTarokState::AnnouncementsCallPartner(Action action) {
       }
     }
   } else {
-    game_data_.partner_ = std::nullopt;
+    common_state_.partner_ = std::nullopt;
   }
 
   announcements_.partner_called = true;
-  announcements_.last_to_speak = game_data_.declarer_;
+  announcements_.last_to_speak = common_state_.declarer_;
 
   for (Player p = 0; p < kNumPlayers; ++p) {
-    game_data_.player_sides_[p] =
-        (p == game_data_.declarer_ ||
-         (game_data_.partner_.has_value() && p == *game_data_.partner_))
+    common_state_.player_sides_[p] =
+        (p == common_state_.declarer_ ||
+         (common_state_.partner_.has_value() && p == *common_state_.partner_))
             ? Side::kDeclarer
             : Side::kOpponents;
   }
@@ -723,26 +723,26 @@ void HungarianTarokState::AnnouncementsDoApplyAction(Action action) {
     if (announcements_.current_player == announcements_.last_to_speak) {
       announcements_.current_player = kTerminalPlayerId;
     }
-    if (announcements_.current_player == game_data_.declarer_) {
+    if (announcements_.current_player == common_state_.declarer_) {
       announcements_.first_round = false;
     }
     return;
   }
 
   AnnouncementAction ann_action = AnnouncementAction::FromAction(action);
-  GameData::AnnouncementSide &current_side = CurrentAnnouncementSide();
-  GameData::AnnouncementSide &other_side = OtherAnnouncementSide();
+  CommonState::AnnouncementSide& current_side = CurrentAnnouncementSide();
+  CommonState::AnnouncementSide& other_side = OtherAnnouncementSide();
   int type_index = static_cast<int>(ann_action.type);
   switch (ann_action.level) {
-  case AnnouncementAction::Level::kAnnounce:
-    current_side.announced[type_index] = true;
-    break;
-  case AnnouncementAction::Level::kContra:
-    other_side.contra_level[type_index]++;
-    break;
-  case AnnouncementAction::Level::kReContra:
-    current_side.contra_level[type_index]++;
-    break;
+    case AnnouncementAction::Level::kAnnounce:
+      current_side.announced[type_index] = true;
+      break;
+    case AnnouncementAction::Level::kContra:
+      other_side.contra_level[type_index]++;
+      break;
+    case AnnouncementAction::Level::kReContra:
+      current_side.contra_level[type_index]++;
+      break;
   }
   announcements_.last_to_speak = announcements_.current_player;
 }
@@ -751,9 +751,8 @@ bool HungarianTarokState::AnnouncementsPhaseOver() const {
   return announcements_.current_player == kTerminalPlayerId;
 }
 
-std::string
-HungarianTarokState::AnnouncementsActionToString(Player player,
-                                                 Action action) const {
+std::string HungarianTarokState::AnnouncementsActionToString(
+    Player player, Action action) const {
   SPIEL_CHECK_FALSE(AnnouncementsPhaseOver());
   std::vector<Action> legal_actions = AnnouncementsLegalActions();
   SPIEL_CHECK_TRUE(absl::c_find(legal_actions, action) != legal_actions.end());
@@ -771,43 +770,43 @@ HungarianTarokState::AnnouncementsActionToString(Player player,
   AnnouncementAction ann_action = AnnouncementAction::FromAction(action);
   std::string level_str;
   switch (ann_action.level) {
-  case AnnouncementAction::Level::kAnnounce:
-    level_str = "Announce ";
-    break;
-  case AnnouncementAction::Level::kContra:
-    level_str = "Contra ";
-    break;
-  case AnnouncementAction::Level::kReContra:
-    level_str = "Re-Contra ";
-    break;
+    case AnnouncementAction::Level::kAnnounce:
+      level_str = "Announce ";
+      break;
+    case AnnouncementAction::Level::kContra:
+      level_str = "Contra ";
+      break;
+    case AnnouncementAction::Level::kReContra:
+      level_str = "Re-Contra ";
+      break;
   }
 
   std::string type_str;
   switch (ann_action.type) {
-  case AnnouncementType::kFourKings:
-    type_str = "Four Kings";
-    break;
-  case AnnouncementType::kTuletroa:
-    type_str = "Tuletroa";
-    break;
-  case AnnouncementType::kDoubleGame:
-    type_str = "Double Game";
-    break;
-  case AnnouncementType::kVolat:
-    type_str = "Volat";
-    break;
-  case AnnouncementType::kPagatUltimo:
-    type_str = "Pagat Ultimo";
-    break;
-  case AnnouncementType::kXXICapture:
-    type_str = "XXI Capture";
-    break;
-  case AnnouncementType::kEightTaroks:
-    type_str = "Eight Taroks";
-    break;
-  case AnnouncementType::kNineTaroks:
-    type_str = "Nine Taroks";
-    break;
+    case AnnouncementType::kFourKings:
+      type_str = "Four Kings";
+      break;
+    case AnnouncementType::kTuletroa:
+      type_str = "Tuletroa";
+      break;
+    case AnnouncementType::kDoubleGame:
+      type_str = "Double Game";
+      break;
+    case AnnouncementType::kVolat:
+      type_str = "Volat";
+      break;
+    case AnnouncementType::kPagatUltimo:
+      type_str = "Pagat Ultimo";
+      break;
+    case AnnouncementType::kXXICapture:
+      type_str = "XXI Capture";
+      break;
+    case AnnouncementType::kEightTaroks:
+      type_str = "Eight Taroks";
+      break;
+    case AnnouncementType::kNineTaroks:
+      type_str = "Nine Taroks";
+      break;
   }
   return absl::StrCat(level_str, type_str);
 }
@@ -815,18 +814,18 @@ HungarianTarokState::AnnouncementsActionToString(Player player,
 std::string HungarianTarokState::AnnouncementsToString() const {
   return absl::StrCat("Announcements Phase\n",
                       "current player: ", announcements_.current_player, "\n",
-                      DeckToString(game_data_.deck_));
+                      DeckToString(common_state_.deck_));
 }
 
 // Play.
 void HungarianTarokState::StartPlayPhase() {
   play_ = PlayState{};
-  play_.current_player = game_data_.declarer_;
+  play_.current_player = common_state_.declarer_;
   play_.trick_caller = play_.current_player;
   play_.trick_cards.clear();
   play_.round = 0;
-  game_data_.tricks_.clear();
-  game_data_.trick_winners_.clear();
+  common_state_.tricks_.clear();
+  common_state_.trick_winners_.clear();
 }
 
 Player HungarianTarokState::PlayCurrentPlayer() const {
@@ -843,24 +842,22 @@ std::vector<Action> HungarianTarokState::PlayLegalActions() const {
   };
   CardLocation current_player_hand = PlayerHandLocation(play_.current_player);
   for (Card card = 0; card < kDeckSize; ++card) {
-    if (game_data_.deck_[card] == current_player_hand && can_play(card)) {
+    if (common_state_.deck_[card] == current_player_hand && can_play(card)) {
       actions.push_back(card);
     }
   }
-  if (!actions.empty())
-    return actions;
+  if (!actions.empty()) return actions;
 
   bool has_tarok = false;
   for (Card card = 0; card < kDeckSize; ++card) {
-    if (game_data_.deck_[card] == current_player_hand &&
+    if (common_state_.deck_[card] == current_player_hand &&
         CardSuit(card) == Suit::kTarok) {
       has_tarok = true;
       break;
     }
   }
   for (Card card = 0; card < kDeckSize; ++card) {
-    if (game_data_.deck_[card] != current_player_hand)
-      continue;
+    if (common_state_.deck_[card] != current_player_hand) continue;
     if (!has_tarok || CardSuit(card) == Suit::kTarok) {
       actions.push_back(card);
     }
@@ -871,11 +868,11 @@ std::vector<Action> HungarianTarokState::PlayLegalActions() const {
 void HungarianTarokState::PlayDoApplyAction(Action action) {
   SPIEL_CHECK_GE(action, 0);
   SPIEL_CHECK_LT(action, kDeckSize);
-  SPIEL_CHECK_EQ(game_data_.deck_[action],
+  SPIEL_CHECK_EQ(common_state_.deck_[action],
                  PlayerHandLocation(play_.current_player));
   SPIEL_CHECK_FALSE(PlayPhaseOver());
 
-  game_data_.deck_[action] = CardLocation::kCurrentTrick;
+  common_state_.deck_[action] = CardLocation::kCurrentTrick;
   play_.trick_cards.push_back(action);
   if (play_.trick_cards.size() == kNumPlayers) {
     ResolveTrick();
@@ -900,13 +897,13 @@ void HungarianTarokState::ResolveTrick() {
   play_.trick_caller = trick_winner;
   play_.current_player = trick_winner;
   for (Card card : play_.trick_cards) {
-    game_data_.deck_[card] = PlayerWonCardsLocation(trick_winner);
+    common_state_.deck_[card] = PlayerWonCardsLocation(trick_winner);
   }
 
-  GameData::Trick trick;
+  CommonState::Trick trick;
   std::copy(play_.trick_cards.begin(), play_.trick_cards.end(), trick.begin());
-  game_data_.tricks_.push_back(trick);
-  game_data_.trick_winners_.push_back(trick_winner);
+  common_state_.tricks_.push_back(trick);
+  common_state_.trick_winners_.push_back(trick_winner);
   play_.trick_cards.clear();
 
   play_.round++;
@@ -931,14 +928,14 @@ std::string HungarianTarokState::PlayActionToString(Player player,
 std::string HungarianTarokState::PlayToString() const {
   return absl::StrCat("Play Phase, round ", play_.round + 1, " ",
                       play_.trick_cards.size(), "/4 cards played\n",
-                      DeckToString(game_data_.deck_));
+                      DeckToString(common_state_.deck_));
 }
 
 std::vector<double> HungarianTarokState::PlayReturns() const {
   if (!PlayPhaseOver()) {
     return std::vector<double>(kNumPlayers, 0.0);
   }
-  const std::array<int, kNumPlayers> scores = CalculateScores(game_data_);
+  const std::array<int, kNumPlayers> scores = CalculateScores(common_state_);
   std::vector<double> returns;
   returns.reserve(kNumPlayers);
   for (int p = 0; p < kNumPlayers; ++p) {
@@ -947,5 +944,5 @@ std::vector<double> HungarianTarokState::PlayReturns() const {
   return returns;
 }
 
-} // namespace hungarian_tarok
-} // namespace open_spiel
+}  // namespace hungarian_tarok
+}  // namespace open_spiel

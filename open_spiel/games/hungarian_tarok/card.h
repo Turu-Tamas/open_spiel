@@ -37,6 +37,9 @@ constexpr Card MakeTarok(int rank) {
 const Card kSkiz = MakeTarok(22);
 const Card kPagat = MakeTarok(1);
 const Card kXXI = MakeTarok(21);
+constexpr bool IsHonour(Card card) {
+  return card == kPagat || card == kXXI || card == kSkiz;
+}
 constexpr Card MakeSuitCard(Suit suit, SuitRank rank) {
   SPIEL_CHECK_NE(suit, Suit::kTarok);
   return kNumTaroks + static_cast<int>(suit) * kNumRanksPerSuit +
@@ -53,31 +56,28 @@ constexpr int CardPointValue(const Card card) {
   SPIEL_CHECK_LT(card, kDeckSize);
   if (CardSuit(card) == Suit::kTarok) {
     // taroks
-    if (card == static_cast<Card>(kPagat))
-      return 5;
-    if (card == static_cast<Card>(kXXI))
-      return 5;
-    if (card == static_cast<Card>(kSkiz))
-      return 5;
+    if (card == static_cast<Card>(kPagat)) return 5;
+    if (card == static_cast<Card>(kXXI)) return 5;
+    if (card == static_cast<Card>(kSkiz)) return 5;
     return 1;
   } else {
     // suit cards
     SuitRank rank =
         static_cast<SuitRank>((card - kNumTaroks) % kNumRanksPerSuit);
     switch (rank) {
-    case SuitRank::kKing:
-      return 5;
-    case SuitRank::kQueen:
-      return 4;
-    case SuitRank::kRider:
-      return 3;
-    case SuitRank::kJack:
-      return 2;
-    case SuitRank::kAceTen:
-      return 1;
-    default:
-      SpielFatalError("Invalid card rank");
-      return 0;
+      case SuitRank::kKing:
+        return 5;
+      case SuitRank::kQueen:
+        return 4;
+      case SuitRank::kRider:
+        return 3;
+      case SuitRank::kJack:
+        return 2;
+      case SuitRank::kAceTen:
+        return 1;
+      default:
+        SpielFatalError("Invalid card rank");
+        return 0;
     }
   }
 }
@@ -93,10 +93,10 @@ enum class CardLocation {
   kPlayer2WonCards = 6,
   kPlayer3WonCards = 7,
 
-  kTalon = 8,           // Undealt cards in the talon
-  kDeclarerSkart = 9,   // Cards discarded by the declarer
-  kOpponentsSkart = 10, // Cards discarded by opponents
-  kCurrentTrick = 11,   // Cards currently in play on the table
+  kTalon = 8,            // Undealt cards in the talon
+  kDeclarerSkart = 9,    // Cards discarded by the declarer
+  kOpponentsSkart = 10,  // Cards discarded by opponents
+  kCurrentTrick = 11,    // Cards currently in play on the table
 };
 
 // Deck maps each card to its current location
@@ -137,14 +137,14 @@ constexpr Player WonCardsLocationPlayer(CardLocation loc) {
   SPIEL_CHECK_TRUE(IsWonCards(loc));
   return static_cast<Player>(loc) - kNumPlayers;
 }
-std::string DeckToString(const Deck &deck);
+std::string DeckToString(const Deck& deck);
 
-std::ostream &operator<<(std::ostream &os, const CardLocation &location);
-std::ostream &operator<<(std::ostream &os, const Suit &suit);
-std::ostream &operator<<(std::ostream &os, const SuitRank &rank);
+std::ostream& operator<<(std::ostream& os, const CardLocation& location);
+std::ostream& operator<<(std::ostream& os, const Suit& suit);
+std::ostream& operator<<(std::ostream& os, const SuitRank& rank);
 
 std::string CardToString(Card card);
-} // namespace hungarian_tarok
-} // namespace open_spiel
+}  // namespace hungarian_tarok
+}  // namespace open_spiel
 
-#endif // OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_CARD_H_
+#endif  // OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_CARD_H_

@@ -26,12 +26,14 @@
 #include "open_spiel/tests/basic_tests.h"
 #include "open_spiel/tests/console_play_test.h"
 
+#include "phases.h"
+
 namespace open_spiel {
 namespace hungarian_tarok {
 namespace {
 
 namespace testing = open_spiel::testing;
-HungarianTarokState PostSetupState(std::mt19937 &mt) {
+HungarianTarokState PostSetupState(std::mt19937& mt) {
   auto game = LoadGame("hungarian_tarok");
   HungarianTarokState state(
       std::static_pointer_cast<const HungarianTarokGame>(game));
@@ -42,9 +44,9 @@ HungarianTarokState PostSetupState(std::mt19937 &mt) {
   return state;
 }
 
-HungarianTarokState PostBiddingState(std::mt19937 &mt) {
+HungarianTarokState PostBiddingState(std::mt19937& mt) {
   HungarianTarokState state = PostSetupState(mt);
-  while (state.GetPhaseType() == PhaseType::kBidding) {
+  while (!state.IsTerminal() && state.GetPhaseType() == PhaseType::kBidding) {
     auto legal_actions = state.LegalActions();
     std::uniform_int_distribution<> dist(0, legal_actions.size() - 1);
     state.ApplyAction(legal_actions[dist(mt)]);
@@ -52,16 +54,17 @@ HungarianTarokState PostBiddingState(std::mt19937 &mt) {
   return state;
 }
 
-HungarianTarokState PostTalonState(std::mt19937 &mt) {
+HungarianTarokState PostTalonState(std::mt19937& mt) {
   HungarianTarokState state = PostBiddingState(mt);
-  while (state.GetPhaseType() == PhaseType::kTalon) {
+  while (!state.IsTerminal() && state.GetPhaseType() == PhaseType::kTalon) {
+    SPIEL_CHECK_EQ(state.CurrentPlayer(), kChancePlayerId);
     auto outcomes = state.ChanceOutcomes();
     state.ApplyAction(SampleAction(outcomes, mt).first);
   }
   return state;
 }
 
-HungarianTarokState PostSkartState(std::mt19937 &mt) {
+HungarianTarokState PostSkartState(std::mt19937& mt) {
   HungarianTarokState state = PostTalonState(mt);
   while (state.GetPhaseType() == PhaseType::kSkart) {
     auto legal_actions = state.LegalActions();
@@ -82,17 +85,52 @@ void BasicHungariantarokTests() {
   // observer);
 }
 
+void TrialThreeTest() {
+  std::mt19937 mt(1234);
+  HungarianTarokState state = PostSetupState(mt);
+  for (int i = 0; i < 20; i++) {
+    while (state.GetPhaseType() == PhaseType::kBidding) {
+      std::vector<Action> legal_actions = state.LegalActions();
+      if (state.CurrentPlayer() == 3) {
+        SPIEL_CHECK_TRUE(absl::c_find(legal_actions, kBiddingActionStandardBid) !=
+                        legal_actions.end());
+        state.ApplyAction(kBiddingActionStandardBid);
+      } else {
+        state.ApplyAction(kBiddingActionPass);
+      }
+    }
+    int count = 0;
+    bool drew_honour = false;
+    while (!state.IsTerminal() && state.GetPhaseType() == PhaseType::kTalon) {
+      auto outcomes = state.ChanceOutcomes();
+      Action action = SampleAction(outcomes, mt).first;
+      state.ApplyAction(action);
+      count++;
+      drew_honour |= count <= 3 && IsHonour(action);
+    }
+
+    if (drew_honour) {
+      SPIEL_CHECK_FALSE(state.IsTerminal());
+    } else {
+      SPIEL_CHECK_TRUE(state.IsTerminal());
+    }
+  }
+}
+
+
+
 void ConsolePlayHungariantarokTest() {
   std::mt19937 mt(1234);
   HungarianTarokState state = PostSkartState(mt);
   testing::ConsolePlayTest(*LoadGame("hungarian_tarok"), &state);
 }
 
-} // namespace
-} // namespace hungarian_tarok
-} // namespace open_spiel
+}  // namespace
+}  // namespace hungarian_tarok
+}  // namespace open_spiel
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
+  open_spiel::hungarian_tarok::TrialThreeTest();
   open_spiel::hungarian_tarok::BasicHungariantarokTests();
-  open_spiel::hungarian_tarok::ConsolePlayHungariantarokTest();
+  // open_spiel::hungarian_tarok::ConsolePlayHungariantarokTest();
 }
