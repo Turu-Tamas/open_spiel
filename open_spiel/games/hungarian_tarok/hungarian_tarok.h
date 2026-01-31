@@ -63,6 +63,9 @@ class HungarianTarokState : public State {
 
   std::unique_ptr<State> Clone() const override;
 
+  PhaseType GetPhaseType() const {
+    return phase_->phase_type();
+  }
  protected:
   void DoApplyAction(Action move) override;
 
@@ -78,8 +81,8 @@ class HungarianTarokGame : public Game {
   std::unique_ptr<State> NewInitialState() const override;
   int MaxChanceOutcomes() const override { return kDeckSize; }
   int NumPlayers() const override;
-  double MinUtility() const override { return -15000; }
-  double MaxUtility() const override { return +15000; }
+  double MinUtility() const override { return -100000; }
+  double MaxUtility() const override { return +100000; }
   absl::optional<double> UtilitySum() const override { return 0; }
   std::vector<int> ObservationTensorShape() const override;
   int MaxGameLength() const override;

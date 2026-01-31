@@ -92,7 +92,7 @@ class BiddingPhase final : public GamePhase {
 
     if (action == kBiddingActionStandardBid) {
       // No holding as first bid.
-      if (!was_held_ && !has_bid_[current_player_]) {
+      if (!was_held_ && has_bid_[current_player_]) {
         was_held_ = true;
       } else {
         lowest_bid_ -= 1;
@@ -124,10 +124,14 @@ class BiddingPhase final : public GamePhase {
                      legal_actions.end());
     if (action == kBiddingActionPass) {
       return "Pass";
-    } else if (action == kBiddingActionStandardBid) {
-      return was_held_ || !has_bid_[current_player_]
-                 ? absl::StrCat("Bid ", lowest_bid_ - 1)
-                 : absl::StrCat("Bid hold ", lowest_bid_);
+    } else {
+      if (!was_held_ && !has_bid_[current_player_]) {
+        return absl::StrCat("Bid ", lowest_bid_ - 1);
+      } else if (was_held_) {
+          return absl::StrCat("Bid ", lowest_bid_ - 1);
+      } else if (!was_held_ && has_bid_[current_player_]) {
+          return absl::StrCat("Hold ", lowest_bid_);
+      }
     }
     return "Unknown action";
   }
@@ -136,6 +140,11 @@ class BiddingPhase final : public GamePhase {
 
  private:
   void NextPlayer() {
+    if (lowest_bid_ == 0 && was_held_) {
+      // Maximum bid reached.
+      current_player_ = kTerminalPlayerId;
+      return;
+    }
     Player next_player = (current_player_ + 1) % kNumPlayers;
     while (has_passed_[next_player] && next_player != current_player_) {
       next_player = (next_player + 1) % kNumPlayers;
@@ -368,7 +377,7 @@ class AnnouncementsPhase final : public GamePhase {
     const GameData::AnnouncementSide& current_side = CurrentSide();
     const GameData::AnnouncementSide& other_side = OtherSide();
 
-    // Separate loops so actions are sorted.
+    // Separate loops for announce, contra and recontra so actions are sorted.
     for (int i = 0; i < kNumAnnouncementTypes; ++i) {
       AnnouncementType type = static_cast<AnnouncementType>(i);
       if (current_side.announced[i]) continue;
@@ -386,6 +395,13 @@ class AnnouncementsPhase final : public GamePhase {
           if (tarok_counts_[current_player_] == 9)
             actions.push_back(AnnouncementAction::AnnounceAction(type));
           break;
+        case AnnouncementType::kFourKings:
+        case AnnouncementType::kDoubleGame:
+          // cannot announce after volat
+          if (!current_side.announced[static_cast<int>(AnnouncementType::kVolat)]) {
+            actions.push_back(AnnouncementAction::AnnounceAction(type));
+          }
+          break;  
         default:
           actions.push_back(AnnouncementAction::AnnounceAction(type));
       }
@@ -393,6 +409,10 @@ class AnnouncementsPhase final : public GamePhase {
 
     for (int i = 0; i < kNumAnnouncementTypes; ++i) {
       AnnouncementType type = static_cast<AnnouncementType>(i);
+      if (type == AnnouncementType::kEightTaroks ||
+          type == AnnouncementType::kNineTaroks) {
+        continue;  // cannot contra these
+      }
       // Contra only if other side announced and not contra'd yet (or
       // re-contra'd).
       if (other_side.announced[i] && other_side.contra_level[i] % 2 == 0 &&
@@ -413,6 +433,35 @@ class AnnouncementsPhase final : public GamePhase {
     actions.push_back(AnnouncementAction::PassAction());
     return actions;
   }
+  
+  void CallPartner(Action action) {
+    if (action == kAnnouncementsActionCallPartner) {
+      // Call highest tarok not in declarer's hand.
+      for (int rank = 20; rank >= 1; --rank) {
+        Card card = MakeTarok(rank);
+        if (deck()[card] != declarer()) {
+          // the card my have been discarded to skart
+          Player location = deck()[card];
+          partner() = IsPlayerHandLocation(location)
+                         ? std::optional<Player>(location)
+                         : std::nullopt;
+          break;
+        }
+      }
+    }  else {
+      partner() = std::nullopt;
+    }
+
+    partner_called_ = true;
+    last_to_speak_ = declarer();
+
+    for (Player p = 0; p < kNumPlayers; ++p) {
+      player_sides()[p] =
+          (p == declarer() || p == partner())
+              ? Side::kDeclarer
+              : Side::kOpponents;
+    }
+  }
 
   void DoApplyAction(Action action) override {
     SPIEL_CHECK_FALSE(PhaseOver());
@@ -421,34 +470,7 @@ class AnnouncementsPhase final : public GamePhase {
                      legal_actions.end());
 
     if (!partner_called_) {
-      if (action == kAnnouncementsActionCallPartner) {
-        // Call highest tarok not in declarer's hand.
-        for (int rank = 20; rank >= 1; --rank) {
-          Card card = MakeTarok(rank);
-          if (deck()[card] != declarer()) {
-            // the card my have been discarded to skart
-            Player location = deck()[card];
-            partner() = IsPlayerHandLocation(location)
-                           ? std::optional<Player>(location)
-                           : std::nullopt;
-            break;
-          }
-        }
-      }  else {
-        partner() = std::nullopt;
-      }
-
-      partner_called_ = true;
-      // Next player is the player after declarer.
-      current_player_ = (declarer() + 1) % kNumPlayers;
-      last_to_speak_ = declarer();
-
-      for (Player p = 0; p < kNumPlayers; ++p) {
-        player_sides()[p] =
-            (p == declarer() || p == partner())
-                ? Side::kDeclarer
-                : Side::kOpponents;
-      }
+      CallPartner(action);
       return;
     }
 
@@ -551,7 +573,11 @@ class AnnouncementsPhase final : public GamePhase {
     return absl::StrCat(level_str, type_str);
   }
 
-  std::string ToString() const override { return "Announcements Phase"; }
+  std::string ToString() const override {
+    return absl::StrCat("Announcements Phase\n",
+                        "current player: ", current_player_, "\n",
+                        DeckToString(deck()));
+  }
 
  private:
   bool IsDeclarerSidePlayer(Player player) const {
@@ -579,6 +605,9 @@ class AnnouncementsPhase final : public GamePhase {
     if (CurrentSide()
             .announced[static_cast<int>(AnnouncementType::kTuletroa)]) {
       return false;  // already announced
+    }
+    if (CurrentSide().announced[static_cast<int>(AnnouncementType::kVolat)]) {
+      return false;  // cannot announce after volat
     }
     if (full_bid() && current_player_ == declarer() &&
         first_round_) {

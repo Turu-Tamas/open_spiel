@@ -63,16 +63,52 @@ bool CardBeats(Card a, Card b) {
     }
   }
 }
+
+std::string ToRomanNumeral(int number) {
+  std::vector<std::pair<int, std::string>> roman_numerals{
+      {10, "X"}, {9, "IX"}, {5, "V"}, {4, "IV"}, {1, "I"}};
+  std::string result;
+  int sum = 0;
+  while (sum < number) {
+    for (const auto& [value, symbol] : roman_numerals) {
+      if (sum + value <= number) {
+        result += symbol;
+        sum += value;
+        break;
+      }
+    }
+  }
+  return result;
+}
+
 std::string CardToString(Card card) {
   SPIEL_CHECK_GE(card, 0);
   SPIEL_CHECK_LT(card, kDeckSize);
   if (card < kNumTaroks) {
-    return absl::StrCat("Tarok ", card + 1);
+    if (card == kSkiz) {
+      return "Skiz";
+    }
+    return ToRomanNumeral(card + 1);
   } else {
     Suit suit = CardSuit(card);
     SuitRank rank =
         static_cast<SuitRank>((card - kNumTaroks) % kNumRanksPerSuit);
-    return absl::StrCat(suit, " ", rank);
+    std::string suit_str;
+    switch (suit) {
+      case Suit::kHearts:   suit_str = "H";    break;
+      case Suit::kDiamonds: suit_str = "D";  break;
+      case Suit::kClubs:    suit_str = "C";     break;
+      case Suit::kSpades:   suit_str = "S";    break;
+    }
+    std::string rank_str;
+    switch (rank) {
+      case SuitRank::kAceTen: rank_str = "A"; break;
+      case SuitRank::kJack:   rank_str = "J"; break;
+      case SuitRank::kRider:  rank_str = "R"; break;
+      case SuitRank::kQueen:  rank_str = "Q"; break;
+      case SuitRank::kKing:   rank_str = "K"; break;
+    }
+    return absl::StrCat(rank_str, "/", suit_str);
   }
 }
 std::string DeckToString(const Deck& deck) {

@@ -24,19 +24,56 @@
 #include "open_spiel/spiel.h"
 #include "open_spiel/spiel_utils.h"
 #include "open_spiel/tests/basic_tests.h"
+#include "open_spiel/tests/console_play_test.h"
 
 namespace open_spiel {
 namespace hungarian_tarok {
 namespace {
 
 namespace testing = open_spiel::testing;
+HungarianTarokState PostSetupState(std::mt19937& mt) {
+  auto game = LoadGame("hungarian_tarok");
+  HungarianTarokState state(std::static_pointer_cast<const HungarianTarokGame>(game));
+  while (state.GetPhaseType() == PhaseType::kSetup) {
+    auto outcomes = state.ChanceOutcomes();
+    state.ApplyAction(SampleAction(outcomes, mt).first);
+  }
+  return state;
+}
+
+HungarianTarokState PostBiddingState(std::mt19937& mt) {
+  HungarianTarokState state = PostSetupState(mt);
+  while (state.GetPhaseType() == PhaseType::kBidding) {
+    auto legal_actions = state.LegalActions();
+    std::uniform_int_distribution<> dist(0, legal_actions.size() - 1);
+    state.ApplyAction(legal_actions[dist(mt)]);
+  }
+  return state;
+}
+
+HungarianTarokState PostTalonState(std::mt19937& mt) {
+  HungarianTarokState state = PostBiddingState(mt);
+  while (state.GetPhaseType() == PhaseType::kTalon) {
+    auto outcomes = state.ChanceOutcomes();
+    state.ApplyAction(SampleAction(outcomes, mt).first);
+  }
+  return state;
+}
+
+HungarianTarokState PostSkartState(std::mt19937& mt) {
+  HungarianTarokState state = PostTalonState(mt);
+  while (state.GetPhaseType() == PhaseType::kSkart) {
+    auto legal_actions = state.LegalActions();
+    std::uniform_int_distribution<> dist(0, legal_actions.size() - 1);
+    state.ApplyAction(legal_actions[dist(mt)]);
+  }
+  return state;
+}
 
 void BasicHungariantarokTests() {
   testing::LoadGameTest("hungarian_tarok");
   testing::ChanceOutcomesTest(*LoadGame("hungarian_tarok"));
-  testing::RandomSimTest(*LoadGame("hungarian_tarok"), 100);
-  testing::RandomSimTest(*LoadGame("hungarian_tarok"), 100);
-  testing::RandomSimTest(*LoadGame("hungarian_tarok"), 100);
+  testing::RandomSimTest(*LoadGame("hungarian_tarok"), 1000);
   // auto observer = LoadGame("hungarian_tarok")
   //                     ->MakeObserver(kDefaultObsType,
   //                                    GameParametersFromString("single_tensor"));
@@ -44,10 +81,17 @@ void BasicHungariantarokTests() {
   // observer);
 }
 
+void ConsolePlayHungariantarokTest() {
+  std::mt19937 mt(1234);
+  HungarianTarokState state = PostSkartState(mt);
+  testing::ConsolePlayTest(*LoadGame("hungarian_tarok"), &state);
+} 
+
 }  // namespace
 }  // namespace hungarian_tarok
 }  // namespace open_spiel
 
 int main(int argc, char** argv) {
   open_spiel::hungarian_tarok::BasicHungariantarokTests();
+  open_spiel::hungarian_tarok::ConsolePlayHungariantarokTest();
 }
