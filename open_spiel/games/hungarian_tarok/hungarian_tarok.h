@@ -65,6 +65,11 @@ class HungarianTarokState : public State {
   void DoApplyAction(Action move) override;
 
  private:
+  // helpers
+  bool PlayerHoldsCard(Player player, Card card) const {
+    return common_state_.deck_[card] == PlayerHandLocation(player);
+  }
+
   // Phase dispatch.
   Player PhaseCurrentPlayer() const;
   std::vector<Action> PhaseLegalActions() const;
@@ -157,12 +162,11 @@ class HungarianTarokState : public State {
 
   struct BiddingState {
     Player current_player = 0;
-    int lowest_bid = 4;
-    bool was_held = false;
+    Bid winning_bid_ = Bid::NewInitialBid();
     bool all_passed = false;
-    std::array<bool, kNumPlayers> has_passed{};
-    std::array<bool, kNumPlayers> has_honour{};
+    std::array<bool, kNumPlayers> can_bid{};
     std::array<bool, kNumPlayers> has_bid{};
+    BidType bid_type = BidType::kStandard;
   } bidding_;
 
   struct TalonState {

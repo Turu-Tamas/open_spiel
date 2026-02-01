@@ -157,7 +157,7 @@ void HungarianTarokState::AdvancePhase() {
       int bidder_count = static_cast<int>(
           std::count(bidding_.has_bid.begin(), bidding_.has_bid.end(), true));
       common_state_.full_bid_ = (bidder_count == 3);
-      common_state_.winning_bid_ = bidding_.lowest_bid;
+      common_state_.winning_bid_ = bidding_.winning_bid_.number;
       current_phase_ = PhaseType::kTalon;
       StartTalonPhase();
       return;
@@ -232,31 +232,120 @@ void HungarianTarokState::StartBiddingPhase() {
   common_state_.declarer_ = 0;
   common_state_.winning_bid_ = -1;
   common_state_.full_bid_ = false;
-  common_state_.partner_ = std::nullopt;
   common_state_.declarer_side_ = CommonState::AnnouncementSide{};
   common_state_.opponents_side_ = CommonState::AnnouncementSide{};
   common_state_.player_sides_.fill(Side::kOpponents);
   common_state_.tricks_.clear();
   common_state_.trick_winners_.clear();
 
-  bidding_.has_honour[HandLocationPlayer(common_state_.deck_[kSkiz])] = true;
-  bidding_.has_honour[HandLocationPlayer(common_state_.deck_[kPagat])] = true;
-  bidding_.has_honour[HandLocationPlayer(common_state_.deck_[kXXI])] = true;
+  bidding_.can_bid[HandLocationPlayer(common_state_.deck_[kSkiz])] = true;
+  bidding_.can_bid[HandLocationPlayer(common_state_.deck_[kPagat])] = true;
+  bidding_.can_bid[HandLocationPlayer(common_state_.deck_[kXXI])] = true;
 }
 
 Player HungarianTarokState::BiddingCurrentPlayer() const {
   return bidding_.current_player;
 }
 
+std::optional<Bid> Bid::NextBid(BidType bid_type, bool first_bid) const {
+  int result_number;
+  bool result_is_hold;
+
+  if (!is_hold && !first_bid){
+    result_number = number;
+    result_is_hold = true;
+  } else {
+    result_number = number - 1;
+    result_is_hold = false;
+  }
+
+  int skipped_bids = 0;
+  if (bid_type == BidType::kStandard) {
+    skipped_bids = 0;
+  } else if (bid_type == BidType::kInvitXIX) {
+    skipped_bids = 1;
+    result_is_hold = false;
+  } else if (bid_type == BidType::kInvitXVIII) {
+    skipped_bids = 2;
+    result_is_hold = false;
+  }
+
+  result_number -= skipped_bids;
+  if (result_number < 0) {
+    return std::nullopt;
+  }
+  return Bid{result_number, result_is_hold};
+}
+
+BidType Bid::GetBidTypeOf(Action action) const {
+  Bid bid = FromAction(action);
+  SPIEL_CHECK_TRUE(NextBidCanBe(action));
+
+  int diff = number - bid.number;
+  if (!is_hold) {
+    diff += 1;
+  }    
+  if (diff == 1) {
+    return BidType::kStandard;
+  } else if (diff == 2) {
+    return BidType::kInvitXIX;
+  } else if (diff == 3) {
+    return BidType::kInvitXVIII;
+  } else if (diff == 4) {
+    return BidType::kStraightSolo;
+  } else {
+    SpielFatalError("GetBidTypeOf called with invalid bid");
+  }
+}
+
+bool Bid::NextBidCanBe(Action action) const {
+  Bid new_bid = FromAction(action);
+  if (new_bid.number < number && !new_bid.is_hold) {
+    return true; // new number, not hold
+  }
+  if (new_bid.number == number && !is_hold && new_bid.is_hold) {
+    return true; // hold at same number
+  }
+  return false;
+}
+
 std::vector<Action> HungarianTarokState::BiddingLegalActions() const {
   SPIEL_CHECK_FALSE(BiddingPhaseOver());
-  if (!bidding_.has_honour[bidding_.current_player]) {
-    if (bidding_.lowest_bid == 4 && bidding_.current_player == 3) {
-      return {kBiddingActionPass, kBiddingActionStandardBid};
-    }
-    return {kBiddingActionPass};
+
+  bool first_bid = bidding_.winning_bid_ == Bid::NewInitialBid();
+  bool final_player = bidding_.current_player == 3;
+  bool can_bid = bidding_.can_bid[bidding_.current_player];
+
+  if (final_player && first_bid && !can_bid) {
+    // trial three or pass
+    return {Bid{3, false}.ToAction(), Bid::PassAction()};
   }
-  return {kBiddingActionPass, kBiddingActionStandardBid};
+  if (!can_bid) {
+    return {Bid::PassAction()};
+  }
+
+  std::vector<Action> actions;
+  bool any_bid_legal = bidding_.bid_type != BidType::kStandard || (first_bid && final_player);
+
+  for (Action action = Bid::MinAction(); action <= Bid::MaxAction(); ++action) {
+    if (!bidding_.winning_bid_.NextBidCanBe(action)) {
+      continue;
+    }
+
+    if (any_bid_legal) {
+      actions.push_back(action);
+      continue;
+    }
+
+    BidType bid_type = bidding_.winning_bid_.GetBidTypeOf(action);
+    std::optional<Card> card = IndicatedCard(bid_type);
+    if (!card.has_value() || PlayerHoldsCard(bidding_.current_player, card.value())) {
+      actions.push_back(action);
+    }
+  }
+
+  actions.push_back(Bid::PassAction());
+  return actions;
 }
 
 void HungarianTarokState::BiddingDoApplyAction(Action action) {
@@ -264,39 +353,44 @@ void HungarianTarokState::BiddingDoApplyAction(Action action) {
   std::vector<Action> legal_actions = BiddingLegalActions();
   SPIEL_CHECK_TRUE(absl::c_find(legal_actions, action) != legal_actions.end());
 
-  if (action == kBiddingActionStandardBid) {
-    if (!bidding_.has_honour[bidding_.current_player] &&
-        bidding_.lowest_bid == 4 && bidding_.current_player == 3) {
-      // Special case: last player can bid 3 even without an honour.
-      common_state_.trial_three_ = true;
-    }
-    // No holding as first bid.
-    if (!bidding_.was_held && bidding_.has_bid[bidding_.current_player]) {
-      bidding_.was_held = true;
-    } else {
-      bidding_.lowest_bid -= 1;
-      bidding_.was_held = false;
-    }
-    common_state_.declarer_ = bidding_.current_player;
-    bidding_.has_bid[bidding_.current_player] = true;
-  } else if (action == kBiddingActionPass) {
-    bidding_.has_passed[bidding_.current_player] = true;
+  if (action == Bid::PassAction()) {
+    bidding_.can_bid[bidding_.current_player] = false;
+    return;
+  }
+
+  BidType bid_type = bidding_.winning_bid_.GetBidTypeOf(action);
+  bidding_.winning_bid_ = Bid::FromAction(action);
+  bidding_.has_bid[bidding_.current_player] = true;
+  common_state_.declarer_ = bidding_.current_player;
+
+  if (bidding_.bid_type != BidType::kStandard) {
+    // someone bid after cue bid, so the cue bidder will not win the bid, making calling the indicated card mandatory
+    common_state_.mandatory_called_card_ = IndicatedCard(bid_type);
+  }
+  // after a cue bid was already made, nothing counts as cue bid
+  if (bid_type != BidType::kStandard && bidding_.bid_type == BidType::kStandard) {
+    // dont bid after cue bid
+    bidding_.can_bid[bidding_.current_player] = false;
+    common_state_.cue_bidder_ = bidding_.current_player;
+    bidding_.bid_type = bid_type;
   }
   BiddingNextPlayer();
 }
 
 void HungarianTarokState::BiddingNextPlayer() {
-  if (bidding_.lowest_bid == 0 && bidding_.was_held) {
+  const Bid &current_bid = bidding_.winning_bid_;
+  if (current_bid.number == 0 && current_bid.is_hold) {
     // Maximum bid reached.
     bidding_.current_player = kTerminalPlayerId;
     return;
   }
   Player next_player = (bidding_.current_player + 1) % kNumPlayers;
-  while (bidding_.has_passed[next_player] &&
+  while (!bidding_.can_bid[next_player] &&
          next_player != bidding_.current_player) {
     next_player = (next_player + 1) % kNumPlayers;
   }
   if (next_player == common_state_.declarer_) {
+    // Back to declarer, everyone else passed, bidding over.
     bidding_.current_player = kTerminalPlayerId;
     return;
   }
@@ -304,8 +398,6 @@ void HungarianTarokState::BiddingNextPlayer() {
     // Everyone passed.
     bidding_.current_player = kTerminalPlayerId;
     bidding_.all_passed = true;
-    common_state_.declarer_ = -1;
-    common_state_.winning_bid_ = -1;
     return;
   }
   bidding_.current_player = next_player;
@@ -324,15 +416,23 @@ std::string HungarianTarokState::BiddingActionToString(Player player,
   SPIEL_CHECK_FALSE(BiddingPhaseOver());
   std::vector<Action> legal_actions = BiddingLegalActions();
   SPIEL_CHECK_TRUE(absl::c_find(legal_actions, action) != legal_actions.end());
-  if (action == kBiddingActionPass) {
+
+  if (action == Bid::PassAction()) {
     return "Pass";
   }
-  if (!bidding_.was_held && !bidding_.has_bid[bidding_.current_player]) {
-    return absl::StrCat("Bid ", bidding_.lowest_bid - 1);
-  } else if (bidding_.was_held) {
-    return absl::StrCat("Bid ", bidding_.lowest_bid - 1);
-  } else if (!bidding_.was_held && bidding_.has_bid[bidding_.current_player]) {
-    return absl::StrCat("Hold ", bidding_.lowest_bid);
+  Bid bid = Bid::FromAction(action);
+  const Bid &current_bid = bidding_.winning_bid_;
+  if (bid.is_hold) {
+    return absl::StrCat("Hold at ", bid.number);
+  } else {
+    std::string ivnit_str = " (Standard bid)";
+    bool first_bid = !bidding_.has_bid[bidding_.current_player];
+    if (bid == current_bid.NextBid(BidType::kInvitXIX, first_bid)) {
+      ivnit_str = " (Cue bid XIX)";
+    } else if (bid == current_bid.NextBid(BidType::kInvitXVIII, first_bid)) {
+      ivnit_str = " (Cue bid XVIII)";
+    }
+    return absl::StrCat("Bid ", bid.number, ivnit_str);
   }
   return "Unknown action";
 }
@@ -525,6 +625,7 @@ std::string HungarianTarokState::SkartToString() const {
 
 // Announcements.
 void HungarianTarokState::StartAnnouncementsPhase() {
+  common_state_.partner_ = std::nullopt;
   announcements_ = AnnouncementsState{};
   announcements_.current_player = common_state_.declarer_;
   announcements_.tarok_counts.fill(0);
@@ -610,8 +711,7 @@ bool HungarianTarokState::CanAnnounceTuletroa() const {
 std::vector<Action> HungarianTarokState::AnnouncementsLegalActions() const {
   SPIEL_CHECK_FALSE(AnnouncementsPhaseOver());
   if (!announcements_.partner_called) {
-    if (common_state_.deck_[MakeTarok(20)] ==
-        PlayerHandLocation(common_state_.declarer_)) {
+    if (!common_state_.mandatory_called_card_.has_value() && PlayerHoldsCard(announcements_.current_player, MakeTarok(20))) {
       return {kAnnouncementsActionCallPartner, kAnnouncementsActionCallSelf};
     }
     return {kAnnouncementsActionCallPartner};
@@ -678,19 +778,28 @@ std::vector<Action> HungarianTarokState::AnnouncementsLegalActions() const {
 }
 
 void HungarianTarokState::AnnouncementsCallPartner(Action action) {
-  if (action == kAnnouncementsActionCallPartner) {
-    for (int rank = 20; rank >= 1; --rank) {
-      Card card = MakeTarok(rank);
-      if (common_state_.deck_[card] !=
-          PlayerHandLocation(common_state_.declarer_)) {
-        CardLocation location = common_state_.deck_[card];
-        common_state_.partner_ =
-            IsPlayerHand(location)
-                ? std::optional<Player>(HandLocationPlayer(location))
-                : std::nullopt;
-        break;
-      }
+  auto get_called_card = [&]() -> Card {
+    if (common_state_.mandatory_called_card_.has_value()) {
+      return common_state_.mandatory_called_card_.value();
     }
+
+    Card highest_missing;
+    for (int rank = 20; ; --rank) {
+      Card card = MakeTarok(rank);
+      if (!PlayerHoldsCard(announcements_.current_player, card)) {
+        highest_missing = card;
+        break;
+      } 
+    }
+    return highest_missing;
+  };
+
+  if (action == kAnnouncementsActionCallPartner) {
+    CardLocation location = common_state_.deck_[get_called_card()];
+    common_state_.partner_ =
+        IsPlayerHand(location)
+            ? std::optional<Player>(HandLocationPlayer(location))
+            : std::nullopt;
   } else {
     common_state_.partner_ = std::nullopt;
   }

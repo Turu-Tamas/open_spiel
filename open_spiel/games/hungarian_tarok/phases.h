@@ -11,10 +11,63 @@
 namespace open_spiel {
 namespace hungarian_tarok {
 
-constexpr Action kBiddingActionPass = 0;
-constexpr Action kBiddingActionStandardBid = 1;
-constexpr Action kBiddingActionInvitXIX = 2;
-constexpr Action kBiddingActionInvitXVIII = 3;
+enum class BidType {
+  kStandard,
+  kInvitXIX,
+  kInvitXVIII,
+  kStraightSolo, // solo as first bidder
+};
+
+constexpr std::optional<Card> IndicatedCard(BidType bid_type) {
+  switch (bid_type) {
+    case BidType::kStandard:
+      return std::nullopt;
+    case BidType::kInvitXIX:
+      return MakeTarok(19);
+    case BidType::kInvitXVIII:
+      return MakeTarok(18);
+    case BidType::kStraightSolo:
+      return std::nullopt;
+  }
+  SpielFatalError("Unknown BidType");
+}
+
+struct Bid {
+  int number;
+  bool is_hold;
+
+  constexpr static Bid FromAction(Action action) {
+    SPIEL_CHECK_GE(action, MinAction());
+    SPIEL_CHECK_LE(action, MaxAction());
+    Bid result{};
+    result.number = action / 2;
+    result.is_hold = (action % 2 == 1);
+    return result;
+  }
+  constexpr static Action MinAction() {
+    return 0;
+  }
+  constexpr static Action MaxAction() {
+    return 6;
+  }
+  constexpr Action ToAction() const {
+    return static_cast<Action>(number * 2 + (is_hold ? 1 : 0));
+  }
+  constexpr static Bid NewInitialBid() {
+    return Bid{4, true};
+  }
+  constexpr static Action PassAction() {
+    return MaxAction() + 1;
+  }
+  std::optional<Bid> NextBid(BidType bid_type, bool first_bid) const;
+  constexpr bool operator==(const Bid& other) const {
+    return number == other.number && is_hold == other.is_hold;
+  }
+  
+  BidType GetBidTypeOf(Action action) const;
+  bool NextBidCanBe(Action action) const;
+};
+
 
 constexpr Action kAnnouncementsActionCallPartner = 0;
 constexpr Action kAnnouncementsActionCallSelf = 1;
@@ -96,11 +149,13 @@ struct CommonState {
   Player declarer_;
   int winning_bid_;
   bool full_bid_;  // wether all three honours bid
-  std::optional<Player> partner_;
   bool trial_three_ = false;  // when declarer draws three cards as last player
                               // without an honour
-
+  std::optional<Card> mandatory_called_card_;
+  std::optional<Player> cue_bidder_ = std::nullopt;
+  
   // announcements results
+  std::optional<Player> partner_;
   struct AnnouncementSide {
     std::array<bool, kNumAnnouncementTypes> announced = {false};
     std::array<int, kNumAnnouncementTypes> contra_level = {0};
