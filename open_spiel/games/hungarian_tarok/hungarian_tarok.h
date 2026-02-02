@@ -60,16 +60,14 @@ class HungarianTarokState : public State {
   PhaseType GetPhaseType() const { return current_phase_; }
 
   std::vector<Card> PlayerHand(Player player) const;
+  bool PlayerHoldsCard(Player player, Card card) const {
+    return common_state_.deck_[card] == PlayerHandLocation(player);
+  }
 
  protected:
   void DoApplyAction(Action move) override;
 
  private:
-  // helpers
-  bool PlayerHoldsCard(Player player, Card card) const {
-    return common_state_.deck_[card] == PlayerHandLocation(player);
-  }
-
   // Phase dispatch.
   Player PhaseCurrentPlayer() const;
   std::vector<Action> PhaseLegalActions() const;
@@ -166,6 +164,7 @@ class HungarianTarokState : public State {
     bool all_passed = false;
     std::array<bool, kNumPlayers> can_bid{};
     std::array<bool, kNumPlayers> has_bid{};
+    std::array<bool, kNumPlayers> has_passed{};
     BidType bid_type = BidType::kStandard;
   } bidding_;
 

@@ -86,29 +86,38 @@ void BasicHungariantarokTests() {
 
 void TrialThreeTest() {
   std::mt19937 mt(1234);
-  HungarianTarokState state = PostSetupState(mt);
-  for (int i = 0; i < 20; i++) {
+
+  for (int i = 0; i < 200; i++) {
+    HungarianTarokState state = PostSetupState(mt);
+    bool has_honour = state.PlayerHoldsCard(3, kPagat) ||
+                      state.PlayerHoldsCard(3, kSkiz) ||
+                      state.PlayerHoldsCard(3, kXXI);
+    if (has_honour) continue;
+
     while (state.GetPhaseType() == PhaseType::kBidding) {
       std::vector<Action> legal_actions = state.LegalActions();
       if (state.CurrentPlayer() == 3) {
         SPIEL_CHECK_TRUE(
-            absl::c_find(legal_actions, kBiddingActionStandardBid) !=
+            absl::c_find(legal_actions, Bid{3, false}.ToAction()) !=
             legal_actions.end());
-        state.ApplyAction(kBiddingActionStandardBid);
+
+        state.ApplyAction(Bid{3, false}.ToAction());
       } else {
-        state.ApplyAction(kBiddingActionPass);
+        state.ApplyAction(Bid::PassAction());
       }
     }
+
     int count = 0;
-    bool drew_honour = false;
     while (!state.IsTerminal() && state.GetPhaseType() == PhaseType::kTalon) {
       auto outcomes = state.ChanceOutcomes();
       Action action = SampleAction(outcomes, mt).first;
       state.ApplyAction(action);
       count++;
-      drew_honour |= count <= 3 && IsHonour(action);
     }
 
+    bool drew_honour = state.PlayerHoldsCard(3, kPagat) ||
+                       state.PlayerHoldsCard(3, kSkiz) ||
+                       state.PlayerHoldsCard(3, kXXI);
     if (drew_honour) {
       SPIEL_CHECK_FALSE(state.IsTerminal());
     } else {

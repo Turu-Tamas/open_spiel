@@ -15,7 +15,7 @@ enum class BidType {
   kStandard,
   kInvitXIX,
   kInvitXVIII,
-  kStraightSolo, // solo as first bidder
+  kStraightSolo,  // solo as first bidder
 };
 
 constexpr std::optional<Card> IndicatedCard(BidType bid_type) {
@@ -44,30 +44,21 @@ struct Bid {
     result.is_hold = (action % 2 == 1);
     return result;
   }
-  constexpr static Action MinAction() {
-    return 0;
-  }
-  constexpr static Action MaxAction() {
-    return 6;
-  }
+  constexpr static Action MinAction() { return 0; }
+  constexpr static Action MaxAction() { return 6; }
   constexpr Action ToAction() const {
     return static_cast<Action>(number * 2 + (is_hold ? 1 : 0));
   }
-  constexpr static Bid NewInitialBid() {
-    return Bid{4, true};
-  }
-  constexpr static Action PassAction() {
-    return MaxAction() + 1;
-  }
+  constexpr static Bid NewInitialBid() { return Bid{4, true}; }
+  constexpr static Action PassAction() { return MaxAction() + 1; }
   std::optional<Bid> NextBid(BidType bid_type, bool first_bid) const;
   constexpr bool operator==(const Bid& other) const {
     return number == other.number && is_hold == other.is_hold;
   }
-  
+
   BidType GetBidTypeOf(Action action) const;
   bool NextBidCanBe(Action action) const;
 };
-
 
 constexpr Action kAnnouncementsActionCallPartner = 0;
 constexpr Action kAnnouncementsActionCallSelf = 1;
@@ -148,12 +139,12 @@ struct CommonState {
   // bidding results
   Player declarer_;
   int winning_bid_;
-  bool full_bid_;  // wether all three honours bid
+  bool full_bid_;             // wether all three honours bid
   bool trial_three_ = false;  // when declarer draws three cards as last player
                               // without an honour
   std::optional<Card> mandatory_called_card_;
   std::optional<Player> cue_bidder_ = std::nullopt;
-  
+
   // announcements results
   std::optional<Player> partner_;
   struct AnnouncementSide {
