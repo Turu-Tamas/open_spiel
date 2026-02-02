@@ -143,6 +143,7 @@ HungarianTarokState::HungarianTarokState(const HungarianTarokState& other)
 int HungarianTarokState::CurrentPlayer() const { return PhaseCurrentPlayer(); }
 
 void HungarianTarokState::DoApplyAction(Action move) {
+  SPIEL_CHECK_FALSE(IsTerminal());
   PhaseDoApplyAction(move);
   if (GameOver()) return;
   if (PhaseOver()) AdvancePhase();
@@ -219,7 +220,6 @@ std::string HungarianTarokGame::ActionToString(Player player,
   if (player == kChancePlayerId) {
     return "Chance";
   }
-  if (action == ActionType::kPass) return "Pass";
   return absl::StrCat("Action(", action, ")");
 }
 
@@ -237,6 +237,61 @@ std::vector<Card> HungarianTarokState::PlayerHand(Player player) const {
     }
   }
   return hand;
+}
+
+HungarianTarokState DealHelper::PostSetup() {
+  auto game = LoadGame("hungarian_tarok");
+  HungarianTarokState state(game);
+
+  const int total_dealt_cards = kPlayerHandSize * kNumPlayers;
+
+  std::array<int, kNumPlayers> destined_remaining{};
+  destined_remaining.fill(0);
+  for (Card card = 0; card < total_dealt_cards; ++card) {
+    if (card_destinations_[card].has_value()) {
+      destined_remaining[card_destinations_[card].value()]++;
+    }
+  }
+
+  std::array<int, kNumPlayers> current_card_counts{};
+  current_card_counts.fill(0);
+
+  Card current_card = 0;
+  while (state.GetPhaseType() == PhaseType::kSetup) {
+    auto legal_actions = state.LegalActions();
+
+    Player target_player;
+    if (card_destinations_[current_card].has_value()) {
+      target_player = card_destinations_[current_card].value();
+      destined_remaining[target_player]--;
+
+      if (absl::c_find(legal_actions,
+                    static_cast<Action>(target_player)) == legal_actions.end()) {
+        SpielFatalError(
+            "DealHelper: Cannot deal card to requested player - hand is full");
+      }
+    } else {
+      target_player = -1;
+      for (Action action : legal_actions) {
+        Player p = static_cast<Player>(action);
+        int room = kPlayerHandSize - current_card_counts[p];
+        if (room > destined_remaining[p]) {
+          target_player = p;
+          break;
+        }
+      }
+      if (target_player == -1) { // should be impossible
+        SpielFatalError(
+            "DealHelper: Cannot deal card to any player - all hands full");
+      }
+    }
+
+    state.ApplyAction(target_player);
+    current_card_counts[target_player]++;
+    current_card++;
+  }
+
+  return state;
 }
 
 }  // namespace hungarian_tarok

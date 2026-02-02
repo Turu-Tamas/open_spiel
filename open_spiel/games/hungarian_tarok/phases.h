@@ -56,7 +56,7 @@ struct Bid {
     return number == other.number && is_hold == other.is_hold;
   }
 
-  BidType GetBidTypeOf(Action action) const;
+  BidType GetBidTypeOf(Action action, bool first_bid) const;
   bool NextBidCanBe(Action action) const;
 };
 
@@ -94,6 +94,8 @@ enum class PhaseType {
   kAnnouncements,
   kPlay
 };
+
+std::ostream& operator<<(std::ostream& os, const PhaseType& phase);
 
 struct AnnouncementAction {
   AnnouncementType type;

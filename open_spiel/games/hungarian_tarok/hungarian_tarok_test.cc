@@ -36,9 +36,11 @@ HungarianTarokState PostSetupState(std::mt19937& mt) {
   auto game = LoadGame("hungarian_tarok");
   HungarianTarokState state(
       std::static_pointer_cast<const HungarianTarokGame>(game));
+  Card card = 0;
   while (state.GetPhaseType() == PhaseType::kSetup) {
     auto outcomes = state.ChanceOutcomes();
     state.ApplyAction(SampleAction(outcomes, mt).first);
+    card++;
   }
   return state;
 }
@@ -126,6 +128,33 @@ void TrialThreeTest() {
   }
 }
 
+void TestBidSequence(std::array<Player, 3> honours, Player XVIII, Player XIX, std::vector<std::optional<Bid>> bids) {
+  std::mt19937 mt(1234);
+
+  DealHelper deal_helper;
+  deal_helper.SetCardDestination(kPagat, honours[0]);
+  deal_helper.SetCardDestination(kSkiz, honours[1]);
+  deal_helper.SetCardDestination(kXXI, honours[2]);
+  deal_helper.SetCardDestination(MakeTarok(18), XVIII);
+  deal_helper.SetCardDestination(MakeTarok(19), XIX);
+  HungarianTarokState state = deal_helper.PostSetup();
+
+  for (std::optional<Bid> bid : bids) {
+    if (!bid.has_value()) {
+      state.ApplyAction(Bid::PassAction());
+      continue;
+    }
+
+    SPIEL_CHECK_EQ(state.GetPhaseType(), PhaseType::kBidding);
+    std::vector<Action> legal_actions = state.LegalActions();
+    SPIEL_CHECK_TRUE(
+        absl::c_find(legal_actions, bid->ToAction()) != legal_actions.end());
+    state.ApplyAction(bid->ToAction());
+  }
+  SPIEL_CHECK_EQ(state.GetPhaseType(), PhaseType::kTalon);
+  testing::RandomSimTest(*LoadGame("hungarian_tarok"), 3, &state);
+}
+
 void ConsolePlayHungariantarokTest() {
   std::mt19937 mt(1234);
   HungarianTarokState state = PostSkartState(mt);
@@ -137,6 +166,19 @@ void ConsolePlayHungariantarokTest() {
 }  // namespace open_spiel
 
 int main(int argc, char** argv) {
+  using Bid = open_spiel::hungarian_tarok::Bid;
+  open_spiel::hungarian_tarok::TestBidSequence(
+    {1, 2, 3},
+    0, 3,
+    {
+      std::nullopt,
+      Bid{3, false},
+      Bid{2, false},
+      Bid{0, false},
+
+      std::nullopt,
+      std::nullopt,
+  });
   open_spiel::hungarian_tarok::TrialThreeTest();
   open_spiel::hungarian_tarok::BasicHungariantarokTests();
   // open_spiel::hungarian_tarok::ConsolePlayHungariantarokTest();

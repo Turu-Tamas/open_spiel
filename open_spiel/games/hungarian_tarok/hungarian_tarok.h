@@ -33,10 +33,30 @@
 namespace open_spiel {
 namespace hungarian_tarok {
 
-// Minimal placeholder action set.
-enum ActionType : Action { kPass = 0 };
-
 class HungarianTarokGame;
+class HungarianTarokState;
+
+// Helper class for setting up specific card deals in tests.
+// Allows specifying which player should receive which cards.
+class DealHelper {
+ public:
+  DealHelper() : card_destinations_() {
+    card_destinations_.fill(std::nullopt);
+  }
+
+  // Specify that a card should be dealt to a specific player.
+  void SetCardDestination(Card card, Player player) {
+    SPIEL_CHECK_GE(card, 0);
+    SPIEL_CHECK_LT(card, kDeckSize);
+    SPIEL_CHECK_GE(player, 0);
+    SPIEL_CHECK_LT(player, kNumPlayers);
+    card_destinations_[card] = player;
+  }
+
+  HungarianTarokState PostSetup();
+ private:
+  std::array<std::optional<Player>, kDeckSize> card_destinations_;
+};
 
 class HungarianTarokState : public State {
  public:

@@ -12,6 +12,31 @@
 namespace open_spiel {
 namespace hungarian_tarok {
 
+std::ostream& operator<<(std::ostream& os, const PhaseType& phase) {
+  switch (phase) {
+    case PhaseType::kSetup:
+      os << "Setup";
+      break;
+    case PhaseType::kBidding:
+      os << "Bidding";
+      break;
+    case PhaseType::kTalon:
+      os << "Talon";
+      break;
+    case PhaseType::kSkart:
+      os << "Skart";
+      break;
+    case PhaseType::kAnnouncements:
+      os << "Announcements";
+      break;
+    case PhaseType::kPlay:
+      os << "Play";
+      break;
+  }
+  os << " Phase";
+  return os;
+}
+
 // Generic phase dispatch.
 Player HungarianTarokState::PhaseCurrentPlayer() const {
   switch (current_phase_) {
@@ -278,12 +303,12 @@ std::optional<Bid> Bid::NextBid(BidType bid_type, bool first_bid) const {
   return Bid{result_number, result_is_hold};
 }
 
-BidType Bid::GetBidTypeOf(Action action) const {
+BidType Bid::GetBidTypeOf(Action action, bool first_bid) const {
   Bid bid = FromAction(action);
   SPIEL_CHECK_TRUE(NextBidCanBe(action));
 
   int diff = number - bid.number;
-  if (!is_hold) {
+  if (!is_hold && !first_bid) {
     diff += 1;
   }
   if (diff == 1) {
@@ -304,8 +329,8 @@ bool Bid::NextBidCanBe(Action action) const {
   if (new_bid.number < number && !new_bid.is_hold) {
     return true;  // new number, not hold
   }
-  if (new_bid.number == number && !is_hold && new_bid.is_hold) {
-    return true;  // hold at same number
+  if (new_bid.number == number && is_hold && new_bid.is_hold) {
+    return true;  // hold at same number (only if current bid is already a hold)
   }
   return false;
 }
@@ -328,7 +353,6 @@ std::vector<Action> HungarianTarokState::BiddingLegalActions() const {
   std::vector<Action> actions;
   bool any_bid_legal =
       bidding_.bid_type != BidType::kStandard || (first_bid && final_player);
-
   for (Action action = Bid::MinAction(); action <= Bid::MaxAction(); ++action) {
     if (!bidding_.winning_bid_.NextBidCanBe(action)) {
       continue;
@@ -339,7 +363,8 @@ std::vector<Action> HungarianTarokState::BiddingLegalActions() const {
       continue;
     }
 
-    BidType bid_type = bidding_.winning_bid_.GetBidTypeOf(action);
+    bool first_bid = !bidding_.has_bid[bidding_.current_player];
+    BidType bid_type = bidding_.winning_bid_.GetBidTypeOf(action, first_bid);
     std::optional<Card> card = IndicatedCard(bid_type);
     if (!card.has_value() ||
         PlayerHoldsCard(bidding_.current_player, card.value())) {
@@ -363,7 +388,8 @@ void HungarianTarokState::BiddingDoApplyAction(Action action) {
     return;
   }
 
-  BidType bid_type = bidding_.winning_bid_.GetBidTypeOf(action);
+  bool first_bid = !bidding_.has_bid[bidding_.current_player];
+  BidType bid_type = bidding_.winning_bid_.GetBidTypeOf(action, first_bid);
   bidding_.winning_bid_ = Bid::FromAction(action);
   bidding_.has_bid[bidding_.current_player] = true;
   common_state_.declarer_ = bidding_.current_player;
