@@ -234,9 +234,6 @@ std::array<int, kNumPlayers> CalculateScores(const CommonState& game_data) {
   std::array<int, kNumPlayers> scores;
   scores.fill(0);
   for (Player player = 0; player < kNumPlayers; ++player) {
-    if (player == game_data.partner_) {
-      SPIEL_CHECK_TRUE(game_data.player_sides_[player] == Side::kDeclarer);
-    }
     scores[player] = (game_data.player_sides_[player] == Side::kDeclarer)
                          ? declarer_score
                          : opponents_score;

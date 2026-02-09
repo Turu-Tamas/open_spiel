@@ -40,9 +40,7 @@ class HungarianTarokState;
 // Allows specifying which player should receive which cards.
 class DealHelper {
  public:
-  DealHelper() : card_destinations_() {
-    card_destinations_.fill(std::nullopt);
-  }
+  DealHelper() : card_destinations_() { card_destinations_.fill(std::nullopt); }
 
   // Specify that a card should be dealt to a specific player.
   void SetCardDestination(Card card, Player player) {
@@ -54,6 +52,7 @@ class DealHelper {
   }
 
   HungarianTarokState PostSetup();
+
  private:
   std::array<std::optional<Player>, kDeckSize> card_destinations_;
 };
@@ -82,6 +81,10 @@ class HungarianTarokState : public State {
   std::vector<Card> PlayerHand(Player player) const;
   bool PlayerHoldsCard(Player player, Card card) const {
     return common_state_.deck_[card] == PlayerHandLocation(player);
+  }
+  std::optional<Card> MandatoryCalledCard() const {
+    SPIEL_CHECK_TRUE(current_phase_ > PhaseType::kBidding);
+    return common_state_.mandatory_called_card_;
   }
 
  protected:
@@ -228,8 +231,8 @@ class HungarianTarokGame : public Game {
   std::unique_ptr<State> NewInitialState() const override;
   int MaxChanceOutcomes() const override { return kDeckSize; }
   int NumPlayers() const override;
-  double MinUtility() const override { return -100000; }
-  double MaxUtility() const override { return +100000; }
+  double MinUtility() const override { return -100'000; }
+  double MaxUtility() const override { return +100'000; }
   absl::optional<double> UtilitySum() const override { return 0; }
   std::vector<int> ObservationTensorShape() const override;
   int MaxGameLength() const override;

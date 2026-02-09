@@ -57,7 +57,7 @@ struct Bid {
   }
 
   BidType GetBidTypeOf(Action action, bool first_bid) const;
-  bool NextBidCanBe(Action action) const;
+  bool NextBidCanBe(Action action, bool first_bid) const;
 };
 
 constexpr Action kAnnouncementsActionCallPartner = 0;

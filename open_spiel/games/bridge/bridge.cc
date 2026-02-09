@@ -783,7 +783,6 @@ std::vector<Action> BridgeState::DealLegalActions() const {
 
 std::vector<Action> BridgeState::BiddingLegalActions() const {
   std::vector<Action> legal_actions;
-  legal_actions.reserve(kNumCalls);
   legal_actions.push_back(kBiddingActionBase + kPass);
   if (contract_.level > 0 &&
       Partnership(contract_.declarer) != Partnership(current_player_) &&

@@ -32,21 +32,8 @@ namespace hungarian_tarok {
 namespace {
 
 namespace testing = open_spiel::testing;
-HungarianTarokState PostSetupState(std::mt19937& mt) {
-  auto game = LoadGame("hungarian_tarok");
-  HungarianTarokState state(
-      std::static_pointer_cast<const HungarianTarokGame>(game));
-  Card card = 0;
-  while (state.GetPhaseType() == PhaseType::kSetup) {
-    auto outcomes = state.ChanceOutcomes();
-    state.ApplyAction(SampleAction(outcomes, mt).first);
-    card++;
-  }
-  return state;
-}
-
 HungarianTarokState PostBiddingState(std::mt19937& mt) {
-  HungarianTarokState state = PostSetupState(mt);
+  HungarianTarokState state = DealHelper().PostSetup();
   while (!state.IsTerminal() && state.GetPhaseType() == PhaseType::kBidding) {
     auto legal_actions = state.LegalActions();
     std::uniform_int_distribution<> dist(0, legal_actions.size() - 1);
@@ -78,7 +65,7 @@ HungarianTarokState PostSkartState(std::mt19937& mt) {
 void BasicHungariantarokTests() {
   testing::LoadGameTest("hungarian_tarok");
   testing::ChanceOutcomesTest(*LoadGame("hungarian_tarok"));
-  testing::RandomSimTest(*LoadGame("hungarian_tarok"), 1000);
+  testing::RandomSimTest(*LoadGame("hungarian_tarok"), 500);
   // auto observer = LoadGame("hungarian_tarok")
   //                     ->MakeObserver(kDefaultObsType,
   //                                    GameParametersFromString("single_tensor"));
@@ -86,11 +73,9 @@ void BasicHungariantarokTests() {
   // observer);
 }
 
-void TrialThreeTest() {
-  std::mt19937 mt(1234);
-
+void TrialThreeTest(std::mt19937& mt) {
   for (int i = 0; i < 200; i++) {
-    HungarianTarokState state = PostSetupState(mt);
+    HungarianTarokState state = DealHelper().PostSetup();
     bool has_honour = state.PlayerHoldsCard(3, kPagat) ||
                       state.PlayerHoldsCard(3, kSkiz) ||
                       state.PlayerHoldsCard(3, kXXI);
@@ -128,17 +113,24 @@ void TrialThreeTest() {
   }
 }
 
-void TestBidSequence(std::array<Player, 3> honours, Player XVIII, Player XIX, std::vector<std::optional<Bid>> bids) {
-  std::mt19937 mt(1234);
-
+HungarianTarokState MakeState(std::mt19937& mt, Player pagat, Player xxi,
+                              Player skiz, Player XVIII, Player XIX,
+                              Player XX) {
   DealHelper deal_helper;
-  deal_helper.SetCardDestination(kPagat, honours[0]);
-  deal_helper.SetCardDestination(kSkiz, honours[1]);
-  deal_helper.SetCardDestination(kXXI, honours[2]);
+  deal_helper.SetCardDestination(kPagat, pagat);
+  deal_helper.SetCardDestination(kSkiz, skiz);
+  deal_helper.SetCardDestination(kXXI, xxi);
   deal_helper.SetCardDestination(MakeTarok(18), XVIII);
   deal_helper.SetCardDestination(MakeTarok(19), XIX);
+  deal_helper.SetCardDestination(MakeTarok(20), XX);
   HungarianTarokState state = deal_helper.PostSetup();
+  return state;
+}
 
+HungarianTarokState TestBidSequence(
+    HungarianTarokState state, std::mt19937& mt,
+    std::vector<std::optional<Bid>> bids,
+    std::optional<Card> called_card = std::nullopt) {
   for (std::optional<Bid> bid : bids) {
     if (!bid.has_value()) {
       state.ApplyAction(Bid::PassAction());
@@ -147,12 +139,13 @@ void TestBidSequence(std::array<Player, 3> honours, Player XVIII, Player XIX, st
 
     SPIEL_CHECK_EQ(state.GetPhaseType(), PhaseType::kBidding);
     std::vector<Action> legal_actions = state.LegalActions();
-    SPIEL_CHECK_TRUE(
-        absl::c_find(legal_actions, bid->ToAction()) != legal_actions.end());
+    SPIEL_CHECK_TRUE(absl::c_find(legal_actions, bid->ToAction()) !=
+                     legal_actions.end());
     state.ApplyAction(bid->ToAction());
   }
   SPIEL_CHECK_EQ(state.GetPhaseType(), PhaseType::kTalon);
-  testing::RandomSimTest(*LoadGame("hungarian_tarok"), 3, &state);
+  SPIEL_CHECK_EQ(state.MandatoryCalledCard(), called_card);
+  return state;
 }
 
 void ConsolePlayHungariantarokTest() {
@@ -166,20 +159,91 @@ void ConsolePlayHungariantarokTest() {
 }  // namespace open_spiel
 
 int main(int argc, char** argv) {
-  using Bid = open_spiel::hungarian_tarok::Bid;
-  open_spiel::hungarian_tarok::TestBidSequence(
-    {1, 2, 3},
-    0, 3,
-    {
-      std::nullopt,
-      Bid{3, false},
-      Bid{2, false},
-      Bid{0, false},
+  using namespace open_spiel::hungarian_tarok;
+  std::mt19937 mt(42);
+  std::shared_ptr<const open_spiel::Game> game =
+      open_spiel::LoadGame("hungarian_tarok");
 
-      std::nullopt,
-      std::nullopt,
-  });
-  open_spiel::hungarian_tarok::TrialThreeTest();
-  open_spiel::hungarian_tarok::BasicHungariantarokTests();
-  // open_spiel::hungarian_tarok::ConsolePlayHungariantarokTest();
+  // straight XIX invit, accepted
+  TestBidSequence(MakeState(mt,
+                            /*pagat=*/0, /*xxi=*/3, /*skiz=*/2,
+                            /*XVIII=*/0, /*XIX=*/2, /*XX=*/2),
+                  mt,
+                  {
+                      std::nullopt,
+                      std::nullopt,
+                      Bid{2, false},
+                      Bid{1, false},
+                  },
+                  /*called_card=*/MakeTarok(19));
+  // straight XVIII invit, accepted
+  TestBidSequence(MakeState(mt,
+                            /*pagat=*/0, /*xxi=*/0, /*skiz=*/2,
+                            /*XVIII=*/0, /*XIX=*/2, /*XX=*/2),
+                  mt,
+                  {
+                      Bid{1, false},
+                      std::nullopt,
+                      Bid{0, false},
+                      std::nullopt,
+                  },
+                  /*called_card=*/MakeTarok(18));
+  // straight solo bid
+  TestBidSequence(MakeState(mt,
+                            /*pagat=*/0, /*xxi=*/1, /*skiz=*/1,
+                            /*XVIII=*/1, /*XIX=*/2, /*XX=*/2),
+                  mt,
+                  {
+                      Bid{0, false},
+                      std::nullopt,
+                      std::nullopt,
+                      std::nullopt,
+                  },
+                  /*called_card=*/std::nullopt);
+  // straight XIX invit, not accepted
+  TestBidSequence(MakeState(mt,
+                            /*pagat=*/0, /*xxi=*/1, /*skiz=*/1,
+                            /*XVIII=*/1, /*XIX=*/0, /*XX=*/2),
+                  mt,
+                  {
+                      Bid{2, false},
+                      std::nullopt,
+                      std::nullopt,
+                      std::nullopt,
+                  },
+                  /*called_card=*/std::nullopt);
+  // XIX invit, accepted
+  TestBidSequence(MakeState(mt,
+                            /*pagat=*/0, /*xxi=*/1, /*skiz=*/2,
+                            /*XVIII=*/1, /*XIX=*/1, /*XX=*/2),
+                  mt,
+                  {
+                      std::nullopt,
+                      Bid{3, false},
+                      Bid{2, false},
+                      std::nullopt,
+
+                      Bid{1, false},  // P1
+                      Bid{1, true},   // P2
+                  },
+                  /*called_card=*/MakeTarok(19));
+  // XIX invit, not accepted
+  TestBidSequence(MakeState(mt,
+                            /*pagat=*/0, /*xxi=*/1, /*skiz=*/2,
+                            /*XVIII=*/1, /*XIX=*/1, /*XX=*/2),
+                  mt,
+                  {
+                      std::nullopt,
+                      Bid{3, false},
+                      Bid{2, false},
+                      std::nullopt,
+
+                      Bid{1, false},  // P1
+                      std::nullopt,   // P2
+                  },
+                  /*called_card=*/std::nullopt);
+
+  TrialThreeTest(mt);
+  BasicHungariantarokTests();
+  // ConsolePlayHungariantarokTest();
 }

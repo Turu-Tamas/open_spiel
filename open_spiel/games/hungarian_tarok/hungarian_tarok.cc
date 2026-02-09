@@ -265,8 +265,8 @@ HungarianTarokState DealHelper::PostSetup() {
       target_player = card_destinations_[current_card].value();
       destined_remaining[target_player]--;
 
-      if (absl::c_find(legal_actions,
-                    static_cast<Action>(target_player)) == legal_actions.end()) {
+      if (absl::c_find(legal_actions, static_cast<Action>(target_player)) ==
+          legal_actions.end()) {
         SpielFatalError(
             "DealHelper: Cannot deal card to requested player - hand is full");
       }
@@ -280,7 +280,7 @@ HungarianTarokState DealHelper::PostSetup() {
           break;
         }
       }
-      if (target_player == -1) { // should be impossible
+      if (target_player == -1) {  // should be impossible
         SpielFatalError(
             "DealHelper: Cannot deal card to any player - all hands full");
       }

@@ -305,32 +305,33 @@ std::optional<Bid> Bid::NextBid(BidType bid_type, bool first_bid) const {
 
 BidType Bid::GetBidTypeOf(Action action, bool first_bid) const {
   Bid bid = FromAction(action);
-  SPIEL_CHECK_TRUE(NextBidCanBe(action));
+  SPIEL_CHECK_TRUE(NextBidCanBe(action, first_bid));
 
   int diff = number - bid.number;
   if (!is_hold && !first_bid) {
     diff += 1;
   }
+  SPIEL_CHECK_GE(diff, 1);
+  SPIEL_CHECK_LE(diff, 4);
   if (diff == 1) {
     return BidType::kStandard;
   } else if (diff == 2) {
     return BidType::kInvitXIX;
   } else if (diff == 3) {
     return BidType::kInvitXVIII;
-  } else if (diff == 4) {
+  } else {  // diff == 4
     return BidType::kStraightSolo;
-  } else {
-    SpielFatalError("GetBidTypeOf called with invalid bid");
   }
 }
 
-bool Bid::NextBidCanBe(Action action) const {
+bool Bid::NextBidCanBe(Action action, bool player_first_bid) const {
   Bid new_bid = FromAction(action);
   if (new_bid.number < number && !new_bid.is_hold) {
     return true;  // new number, not hold
   }
-  if (new_bid.number == number && is_hold && new_bid.is_hold) {
-    return true;  // hold at same number (only if current bid is already a hold)
+  if (new_bid.number == number && !is_hold && new_bid.is_hold &&
+      !player_first_bid) {
+    return true;  // hold at same number
   }
   return false;
 }
@@ -338,11 +339,11 @@ bool Bid::NextBidCanBe(Action action) const {
 std::vector<Action> HungarianTarokState::BiddingLegalActions() const {
   SPIEL_CHECK_FALSE(BiddingPhaseOver());
 
-  bool first_bid = bidding_.winning_bid_ == Bid::NewInitialBid();
+  bool no_bids_yet = bidding_.winning_bid_ == Bid::NewInitialBid();
   bool final_player = bidding_.current_player == 3;
   bool can_bid = bidding_.can_bid[bidding_.current_player];
 
-  if (final_player && first_bid && !can_bid) {
+  if (final_player && no_bids_yet && !can_bid) {
     // trial three or pass
     return {Bid{3, false}.ToAction(), Bid::PassAction()};
   }
@@ -352,9 +353,10 @@ std::vector<Action> HungarianTarokState::BiddingLegalActions() const {
 
   std::vector<Action> actions;
   bool any_bid_legal =
-      bidding_.bid_type != BidType::kStandard || (first_bid && final_player);
+      bidding_.bid_type != BidType::kStandard || (no_bids_yet && final_player);
+  bool player_first_bid = !bidding_.has_bid[bidding_.current_player];
   for (Action action = Bid::MinAction(); action <= Bid::MaxAction(); ++action) {
-    if (!bidding_.winning_bid_.NextBidCanBe(action)) {
+    if (!bidding_.winning_bid_.NextBidCanBe(action, player_first_bid)) {
       continue;
     }
 
@@ -363,8 +365,8 @@ std::vector<Action> HungarianTarokState::BiddingLegalActions() const {
       continue;
     }
 
-    bool first_bid = !bidding_.has_bid[bidding_.current_player];
-    BidType bid_type = bidding_.winning_bid_.GetBidTypeOf(action, first_bid);
+    BidType bid_type =
+        bidding_.winning_bid_.GetBidTypeOf(action, player_first_bid);
     std::optional<Card> card = IndicatedCard(bid_type);
     if (!card.has_value() ||
         PlayerHoldsCard(bidding_.current_player, card.value())) {
@@ -388,22 +390,24 @@ void HungarianTarokState::BiddingDoApplyAction(Action action) {
     return;
   }
 
-  bool first_bid = !bidding_.has_bid[bidding_.current_player];
-  BidType bid_type = bidding_.winning_bid_.GetBidTypeOf(action, first_bid);
+  bool player_first_bid = !bidding_.has_bid[bidding_.current_player];
+  BidType bid_type =
+      bidding_.winning_bid_.GetBidTypeOf(action, player_first_bid);
   bidding_.winning_bid_ = Bid::FromAction(action);
   bidding_.has_bid[bidding_.current_player] = true;
   common_state_.declarer_ = bidding_.current_player;
 
   if (bidding_.bid_type != BidType::kStandard) {
-    // someone bid after cue bid, so the cue bidder will not win the bid, making
+    // someone bid after cue bid, accepting it, making
     // calling the indicated card mandatory
-    common_state_.mandatory_called_card_ = IndicatedCard(bid_type);
+    common_state_.mandatory_called_card_ = IndicatedCard(bidding_.bid_type);
   }
   // after a cue bid was already made, nothing counts as cue bid
   if (bid_type != BidType::kStandard &&
       bidding_.bid_type == BidType::kStandard) {
     // dont bid after cue bid
     bidding_.can_bid[bidding_.current_player] = false;
+    bidding_.has_passed[bidding_.current_player] = true;
     common_state_.cue_bidder_ = bidding_.current_player;
     bidding_.bid_type = bid_type;
   }
@@ -420,18 +424,19 @@ void HungarianTarokState::BiddingNextPlayer() {
 
   Player next_player = (bidding_.current_player + 1) % kNumPlayers;
   while (bidding_.has_passed[next_player] &&
-         next_player != bidding_.current_player) {
+         next_player != bidding_.current_player &&
+         next_player != common_state_.declarer_) {
     next_player = (next_player + 1) % kNumPlayers;
   }
 
   if (next_player == common_state_.declarer_) {
-    // Back to declarer, everyone else passed, bidding over.
+    // Back to declarer, bidding over.
     bidding_.current_player = kTerminalPlayerId;
     return;
   }
 
   if (next_player == bidding_.current_player) {
-    // Everyone passed.
+    // 4 passes, game over.
     bidding_.current_player = kTerminalPlayerId;
     bidding_.all_passed = true;
     return;
