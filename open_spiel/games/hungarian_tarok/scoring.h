@@ -177,8 +177,6 @@ std::array<int, kNumPlayers> CalculateScores(const CommonState& game_data) {
 
   PagatUltimoResult pagat_ultimo_result = PagatUltimoWinnerSide(game_data);
   Side pagat_side = game_data.player_sides_[game_data.pagat_holder_];
-  Side other_side =
-      pagat_side == Side::kDeclarer ? Side::kOpponents : Side::kDeclarer;
   const bool& pagatulti_announced =
       pagat_side == Side::kDeclarer
           ? game_data.declarer_side_

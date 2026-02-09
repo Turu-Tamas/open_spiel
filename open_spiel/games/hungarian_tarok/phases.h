@@ -15,6 +15,7 @@ enum class BidType {
   kStandard,
   kInvitXIX,
   kInvitXVIII,
+  kYieldedGame,
   kStraightSolo,  // solo as first bidder
 };
 
@@ -26,6 +27,8 @@ constexpr std::optional<Card> IndicatedCard(BidType bid_type) {
       return MakeTarok(19);
     case BidType::kInvitXVIII:
       return MakeTarok(18);
+    case BidType::kYieldedGame:
+      return MakeTarok(20);
     case BidType::kStraightSolo:
       return std::nullopt;
   }
@@ -54,6 +57,9 @@ struct Bid {
   std::optional<Bid> NextBid(BidType bid_type, bool first_bid) const;
   constexpr bool operator==(const Bid& other) const {
     return number == other.number && is_hold == other.is_hold;
+  }
+  constexpr bool operator!=(const Bid& other) const {
+    return !(*this == other);
   }
 
   BidType GetBidTypeOf(Action action, bool first_bid) const;

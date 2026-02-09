@@ -154,16 +154,7 @@ void ConsolePlayHungariantarokTest() {
   testing::ConsolePlayTest(*LoadGame("hungarian_tarok"), &state);
 }
 
-}  // namespace
-}  // namespace hungarian_tarok
-}  // namespace open_spiel
-
-int main(int argc, char** argv) {
-  using namespace open_spiel::hungarian_tarok;
-  std::mt19937 mt(42);
-  std::shared_ptr<const open_spiel::Game> game =
-      open_spiel::LoadGame("hungarian_tarok");
-
+void TestBids(std::mt19937& mt) {
   // straight XIX invit, accepted
   TestBidSequence(MakeState(mt,
                             /*pagat=*/0, /*xxi=*/3, /*skiz=*/2,
@@ -242,6 +233,30 @@ int main(int argc, char** argv) {
                       std::nullopt,   // P2
                   },
                   /*called_card=*/std::nullopt);
+  // yielded game, XX called
+  TestBidSequence(MakeState(mt,
+                            /*pagat=*/0, /*xxi=*/2, /*skiz=*/3,
+                            /*XVIII=*/1, /*XIX=*/1, /*XX=*/2),
+                  mt,
+                  {
+                    std::nullopt,
+                    std::nullopt,
+                    Bid{3, false},
+                    Bid{2, false},
+
+                    std::nullopt,  // P2
+                  },
+                  /*called_card=*/MakeTarok(20));
+}
+}  // namespace
+}  // namespace hungarian_tarok
+}  // namespace open_spiel
+
+int main(int argc, char** argv) {
+  using namespace open_spiel::hungarian_tarok;
+  std::mt19937 mt(42);
+  std::shared_ptr<const open_spiel::Game> game =
+      open_spiel::LoadGame("hungarian_tarok");
 
   TrialThreeTest(mt);
   BasicHungariantarokTests();

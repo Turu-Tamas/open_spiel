@@ -374,7 +374,12 @@ std::vector<Action> HungarianTarokState::BiddingLegalActions() const {
     }
   }
 
-  actions.push_back(Bid::PassAction());
+  // yielding game is illegal without XX
+  if (!bidding_.has_bid[bidding_.current_player] ||
+      bidding_.winning_bid_ != Bid{2, false} ||
+      PlayerHoldsCard(bidding_.current_player, MakeTarok(20))) {
+    actions.push_back(Bid::PassAction());
+  }
   return actions;
 }
 
@@ -386,6 +391,14 @@ void HungarianTarokState::BiddingDoApplyAction(Action action) {
   if (action == Bid::PassAction()) {
     bidding_.can_bid[bidding_.current_player] = false;
     bidding_.has_passed[bidding_.current_player] = true;
+
+    if (bidding_.has_bid[bidding_.current_player] && bidding_.winning_bid_ == Bid{2, false}) {
+      // Yielded game, XX must be called
+      bidding_.bid_type = BidType::kYieldedGame;
+      common_state_.mandatory_called_card_ = MakeTarok(20);
+      common_state_.cue_bidder_ = bidding_.current_player;
+    }
+
     BiddingNextPlayer();
     return;
   }
@@ -405,7 +418,7 @@ void HungarianTarokState::BiddingDoApplyAction(Action action) {
   // after a cue bid was already made, nothing counts as cue bid
   if (bid_type != BidType::kStandard &&
       bidding_.bid_type == BidType::kStandard) {
-    // dont bid after cue bid
+    // dont bid again after making a cue bid
     bidding_.can_bid[bidding_.current_player] = false;
     bidding_.has_passed[bidding_.current_player] = true;
     common_state_.cue_bidder_ = bidding_.current_player;
@@ -416,7 +429,7 @@ void HungarianTarokState::BiddingDoApplyAction(Action action) {
 
 void HungarianTarokState::BiddingNextPlayer() {
   const Bid& current_bid = bidding_.winning_bid_;
-  if (current_bid.number == 0 && current_bid.is_hold) {
+  if (current_bid == Bid{0, true}) {
     // Maximum bid reached.
     bidding_.current_player = kTerminalPlayerId;
     return;
@@ -721,26 +734,30 @@ bool HungarianTarokState::CanAnnounceTuletroa() const {
           .announced[static_cast<int>(AnnouncementType::kVolat)]) {
     return false;
   }
-  if (common_state_.full_bid_ &&
-      announcements_.current_player == common_state_.declarer_ &&
-      announcements_.first_round) {
-    return common_state_.deck_[kSkiz] ==
-           PlayerHandLocation(common_state_.declarer_);
-  }
+
+  bool is_declarer = announcements_.current_player == common_state_.declarer_;
+  bool is_partner = announcements_.current_player == common_state_.partner_;
+
+  // after a cue bid, tuletroa from declarer means skiz or XXI
   if (announcements_.current_player == common_state_.declarer_ &&
-      announcements_.first_round) {
-    return common_state_.deck_[kXXI] ==
-               PlayerHandLocation(common_state_.declarer_) &&
-           common_state_.deck_[kSkiz] ==
-               PlayerHandLocation(common_state_.declarer_);
+      common_state_.mandatory_called_card_.has_value()) {
+    return PlayerHoldsCard(common_state_.declarer_, kXXI) ||
+           PlayerHoldsCard(common_state_.declarer_, kSkiz);
   }
-  if (common_state_.partner_.has_value() &&
-      announcements_.current_player == *common_state_.partner_ &&
+  // in a full bid, declarer can only announce tuletroa if they have the skiz
+  if (common_state_.full_bid_ && is_declarer && announcements_.first_round) {
+    return PlayerHoldsCard(common_state_.declarer_, kSkiz);
+  }
+  // if not a full bid, tuletroa from declarer means XXI and skiz
+  if (is_declarer && announcements_.first_round) {
+    return PlayerHoldsCard(common_state_.declarer_, kXXI) &&
+           PlayerHoldsCard(common_state_.declarer_, kSkiz);
+  }
+  // as the partner, tuletroa means XXI or skiz
+  if (common_state_.partner_.has_value() && is_partner &&
       announcements_.first_round) {
-    return common_state_.deck_[kXXI] ==
-               PlayerHandLocation(*common_state_.partner_) ||
-           common_state_.deck_[kSkiz] ==
-               PlayerHandLocation(*common_state_.partner_);
+    return PlayerHoldsCard(*common_state_.partner_, kXXI) ||
+           PlayerHoldsCard(*common_state_.partner_, kSkiz);
   }
   return true;
 }
