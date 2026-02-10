@@ -1,4 +1,8 @@
-#include "card.h"
+#include "open_spiel/games/hungarian_tarok/card.h"
+
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace open_spiel {
 namespace hungarian_tarok {

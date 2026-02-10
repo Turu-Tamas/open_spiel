@@ -2,17 +2,19 @@
 #define OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_CARD_H_
 
 #include <array>
+#include <ostream>
+#include <string>
 
-#include "spiel_utils.h"
+#include "open_spiel/spiel_utils.h"
 
 namespace open_spiel {
 namespace hungarian_tarok {
-typedef int Card;
-const int kNumTaroks = 22;
-const int kNumSuits = 4;
-const int kNumRanksPerSuit = 5;
-const int kDeckSize = 42;
-const int kNumPlayers = 4;
+using Card = int;
+constexpr int kNumTaroks = 22;
+constexpr int kNumSuits = 4;
+constexpr int kNumRanksPerSuit = 5;
+constexpr int kDeckSize = 42;
+constexpr int kNumPlayers = 4;
 
 enum class Suit {
   kHearts = 0,
@@ -26,7 +28,7 @@ enum class SuitRank {
   kJack = 1,
   kRider = 2,
   kQueen = 3,
-  kKing = 4
+  kKing = 4,
 };
 
 constexpr Card MakeTarok(int rank) {
@@ -100,7 +102,7 @@ enum class CardLocation {
 };
 
 // Deck maps each card to its current location
-typedef std::array<CardLocation, kDeckSize> Deck;
+using Deck = std::array<CardLocation, kDeckSize>;
 
 // Helper functions to create CardLocations from Player indices
 constexpr CardLocation PlayerHandLocation(Player p) {

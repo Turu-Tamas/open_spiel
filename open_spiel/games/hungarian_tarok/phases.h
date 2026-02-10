@@ -5,8 +5,8 @@
 #include <optional>
 #include <vector>
 
-#include "card.h"
-#include "spiel.h"
+#include "open_spiel/games/hungarian_tarok/card.h"
+#include "open_spiel/spiel.h"
 
 namespace open_spiel {
 namespace hungarian_tarok {
@@ -39,7 +39,7 @@ struct Bid {
   int number;
   bool is_hold;
 
-  constexpr static Bid FromAction(Action action) {
+  static constexpr Bid FromAction(Action action) {
     SPIEL_CHECK_GE(action, MinAction());
     SPIEL_CHECK_LE(action, MaxAction());
     Bid result{};
@@ -47,13 +47,13 @@ struct Bid {
     result.is_hold = (action % 2 == 1);
     return result;
   }
-  constexpr static Action MinAction() { return 0; }
-  constexpr static Action MaxAction() { return 6; }
+  static constexpr Action MinAction() { return 0; }
+  static constexpr Action MaxAction() { return 6; }
   constexpr Action ToAction() const {
     return static_cast<Action>(number * 2 + (is_hold ? 1 : 0));
   }
-  constexpr static Bid NewInitialBid() { return Bid{4, true}; }
-  constexpr static Action PassAction() { return MaxAction() + 1; }
+  static constexpr Bid NewInitialBid() { return Bid{4, true}; }
+  static constexpr Action PassAction() { return MaxAction() + 1; }
   std::optional<Bid> NextBid(BidType bid_type, bool first_bid) const;
   constexpr bool operator==(const Bid& other) const {
     return number == other.number && is_hold == other.is_hold;
@@ -147,25 +147,25 @@ struct CommonState {
   // bidding results
   Player declarer_;
   int winning_bid_;
-  bool full_bid_;             // wether all three honours bid
+  bool full_bid_;             // whether all three honours bid
   bool trial_three_ = false;  // when declarer draws three cards as last player
                               // without an honour
   std::optional<Card> mandatory_called_card_;
-  std::optional<Player> cue_bidder_ = std::nullopt;
+  std::optional<Player> cue_bidder_;
   bool mandatory_pagatulti_ = false;
 
   // announcements results
   std::optional<Player> partner_;
   struct AnnouncementSide {
-    std::array<bool, kNumAnnouncementTypes> announced = {false};
-    std::array<int, kNumAnnouncementTypes> contra_level = {0};
+    std::array<bool, kNumAnnouncementTypes> announced = {};
+    std::array<int, kNumAnnouncementTypes> contra_level = {};
   };
   AnnouncementSide declarer_side_;
   AnnouncementSide opponents_side_;
   std::array<Side, kNumPlayers> player_sides_;
 
   // play results
-  typedef std::array<Card, 4> Trick;
+  using Trick = std::array<Card, kNumPlayers>;
   std::vector<Trick> tricks_;
   std::vector<Player> trick_winners_;
 };

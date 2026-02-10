@@ -7,11 +7,11 @@
 #include <vector>
 
 #include "open_spiel/abseil-cpp/absl/algorithm/container.h"
-#include "phases.h"
+#include "open_spiel/games/hungarian_tarok/phases.h"
 
 namespace open_spiel {
 namespace hungarian_tarok {
-Side CardWinnerSide(const CommonState& game_data, Card card) {
+inline Side CardWinnerSide(const CommonState& game_data, Card card) {
   return game_data.deck_[card] == PlayerWonCardsLocation(game_data.declarer_) ||
                  game_data.partner_ &&
                      game_data.deck_[card] ==
@@ -20,8 +20,8 @@ Side CardWinnerSide(const CommonState& game_data, Card card) {
              : Side::kOpponents;
 }
 
-std::optional<Side> CardSetWinnerSide(const CommonState& game_data,
-                                      const std::vector<Card>& cards) {
+inline std::optional<Side> CardSetWinnerSide(const CommonState& game_data,
+                                             const std::vector<Card>& cards) {
   Side first_side = CardWinnerSide(game_data, cards[0]);
   for (Card card : cards) {
     Side side = CardWinnerSide(game_data, card);
@@ -32,7 +32,7 @@ std::optional<Side> CardSetWinnerSide(const CommonState& game_data,
   return first_side;
 }
 
-std::optional<Side> VolatWinnerSide(const CommonState& game_data) {
+inline std::optional<Side> VolatWinnerSide(const CommonState& game_data) {
   Side first_side = game_data.player_sides_[game_data.trick_winners_.front()];
   return std::all_of(
              game_data.trick_winners_.begin(), game_data.trick_winners_.end(),
@@ -41,7 +41,7 @@ std::optional<Side> VolatWinnerSide(const CommonState& game_data) {
              : std::nullopt;
 }
 
-int DeclarerCardPoints(const CommonState& game_data) {
+inline int DeclarerCardPoints(const CommonState& game_data) {
   int points = 0;
   for (Card card = 0; card < kDeckSize; ++card) {
     CardLocation location = game_data.deck_[card];
@@ -55,7 +55,7 @@ int DeclarerCardPoints(const CommonState& game_data) {
   return points;
 }
 
-std::optional<Side> DoubleGameWinnerSide(const CommonState& game_data) {
+inline std::optional<Side> DoubleGameWinnerSide(const CommonState& game_data) {
   const int kTotalPoints = 94;
   const int kDoubleGameThreshold = 70;
 
@@ -71,7 +71,7 @@ std::optional<Side> DoubleGameWinnerSide(const CommonState& game_data) {
 }
 
 enum class PagatUltimoResult { kFailed, kSucceeded, kNotInLastTrick };
-PagatUltimoResult PagatUltimoWinnerSide(const CommonState& game_data) {
+inline PagatUltimoResult PagatUltimoWinnerSide(const CommonState& game_data) {
   bool pagat_in_last_trick = absl::c_find(game_data.tricks_.back(), kPagat) ==
                              game_data.tricks_.back().end();
   Player trick_winner = game_data.trick_winners_.back();
@@ -87,11 +87,11 @@ PagatUltimoResult PagatUltimoWinnerSide(const CommonState& game_data) {
   }
 }
 
-std::optional<Side> TruletroaWinnerSide(const CommonState& game_data) {
+inline std::optional<Side> TruletroaWinnerSide(const CommonState& game_data) {
   return CardSetWinnerSide(game_data, {kPagat, kXXI, kSkiz});
 }
 
-std::optional<Side> FourKingsWinnerSide(const CommonState& game_data) {
+inline std::optional<Side> FourKingsWinnerSide(const CommonState& game_data) {
   return CardSetWinnerSide(game_data,
                            {MakeSuitCard(Suit::kHearts, SuitRank::kKing),
                             MakeSuitCard(Suit::kDiamonds, SuitRank::kKing),
@@ -99,7 +99,7 @@ std::optional<Side> FourKingsWinnerSide(const CommonState& game_data) {
                             MakeSuitCard(Suit::kSpades, SuitRank::kKing)});
 }
 
-std::optional<Side> XXICatchWinnerSide(const CommonState& game_data) {
+inline std::optional<Side> XXICatchWinnerSide(const CommonState& game_data) {
   bool same_trick = false;
   for (const CommonState::Trick& trick : game_data.tricks_) {
     if (absl::c_find(trick, kXXI) != trick.end() &&
@@ -114,12 +114,13 @@ std::optional<Side> XXICatchWinnerSide(const CommonState& game_data) {
   return std::nullopt;
 }
 
-std::array<int, kNumPlayers> CalculateScores(const CommonState& game_data) {
+inline std::array<int, kNumPlayers> CalculateScores(
+  const CommonState& game_data) {
   const int kGameBaseScore = 4 - game_data.winning_bid_;
   const int kTuletroaScore = 1;
   const int kFourKingsScore = 1;
   const int kPagatUltimoScore = 5;
-  const int XXI_CatchScore = 21;
+  const int kXxiCatchScore = 21;
 
   const int kDoubleGameMultiplier = 2;
   const int kVolatMultiplier = 3;
@@ -173,11 +174,11 @@ std::array<int, kNumPlayers> CalculateScores(const CommonState& game_data) {
   add_scores(four_kings_winner, kFourKingsScore, AnnouncementType::kFourKings);
 
   auto XXI_catch_winner = XXICatchWinnerSide(game_data);
-  add_scores(XXI_catch_winner, XXI_CatchScore, AnnouncementType::kXXICapture);
+  add_scores(XXI_catch_winner, kXxiCatchScore, AnnouncementType::kXXICapture);
 
   PagatUltimoResult pagat_ultimo_result = PagatUltimoWinnerSide(game_data);
   Side pagat_side = game_data.player_sides_[game_data.pagat_holder_];
-  const bool& pagatulti_announced =
+  const bool pagatulti_announced =
       pagat_side == Side::kDeclarer
           ? game_data.declarer_side_
                 .announced[static_cast<int>(AnnouncementType::kPagatUltimo)]
@@ -203,12 +204,12 @@ std::array<int, kNumPlayers> CalculateScores(const CommonState& game_data) {
 
   auto double_game_winner = DoubleGameWinnerSide(game_data);
   auto volat_winner = VolatWinnerSide(game_data);
-  CommonState::AnnouncementSide const& double_side =
+  const CommonState::AnnouncementSide& double_side =
       double_game_winner == Side::kDeclarer ? game_data.declarer_side_
                                             : game_data.opponents_side_;
   add_scores(volat_winner, kGameBaseScore * kVolatMultiplier,
              AnnouncementType::kVolat);
-  // dont score unannounced double games if volat
+  // Don't score unannounced double games if volat.
   if (!volat_winner.has_value() ||
       double_side.announced[static_cast<int>(AnnouncementType::kDoubleGame)]) {
     add_scores(double_game_winner, kGameBaseScore * kDoubleGameMultiplier,

@@ -17,18 +17,20 @@
 #ifndef OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_H_
 #define OPEN_SPIEL_GAMES_HUNGARIAN_TAROK_H_
 
+#include <array>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "card.h"
 #include "open_spiel/abseil-cpp/absl/types/optional.h"
 #include "open_spiel/abseil-cpp/absl/types/span.h"
+#include "open_spiel/games/hungarian_tarok/card.h"
+#include "open_spiel/games/hungarian_tarok/phases.h"
 #include "open_spiel/game_parameters.h"
 #include "open_spiel/observer.h"
 #include "open_spiel/spiel.h"
-#include "phases.h"
 
 namespace open_spiel {
 namespace hungarian_tarok {
@@ -40,7 +42,7 @@ class HungarianTarokState;
 // Allows specifying which player should receive which cards.
 class DealHelper {
  public:
-  DealHelper() : card_destinations_() { card_destinations_.fill(std::nullopt); }
+  DealHelper() { card_destinations_.fill(std::nullopt); }
 
   // Specify that a card should be dealt to a specific player.
   void SetCardDestination(Card card, Player player) {
@@ -187,50 +189,50 @@ class HungarianTarokState : public State {
 
   // Per-phase state.
   struct SetupState {
-    std::array<int, kNumPlayers> player_hands_sizes{};
-    Card current_card = 0;
+    std::array<int, kNumPlayers> player_hands_sizes_{};
+    Card current_card_ = 0;
   } setup_;
 
   struct BiddingState {
-    Player current_player = 0;
+    Player current_player_ = 0;
     Bid winning_bid_ = Bid::NewInitialBid();
-    bool all_passed = false;
-    std::array<bool, kNumPlayers> can_bid{};
-    std::array<bool, kNumPlayers> has_bid{};
-    std::array<bool, kNumPlayers> has_passed{};
-    BidType bid_type = BidType::kStandard;
+    bool all_passed_ = false;
+    std::array<bool, kNumPlayers> can_bid_{};
+    std::array<bool, kNumPlayers> has_bid_{};
+    std::array<bool, kNumPlayers> has_passed_{};
+    BidType bid_type_ = BidType::kStandard;
   } bidding_;
 
   struct TalonState {
-    Player current_player = 0;  // the current player receiving a card
-    std::array<Card, kTalonSize> talon_cards{};
-    std::array<bool, kTalonSize> talon_taken{};
-    std::array<int, kNumPlayers> cards_to_take{};
-    int talon_taken_count = 0;
-    std::vector<double> rewards = {0.0, 0.0, 0.0, 0.0};
-    bool game_over = false;
+    Player current_player_ = 0;  // the current player receiving a card
+    std::array<Card, kTalonSize> talon_cards_{};
+    std::array<bool, kTalonSize> talon_taken_{};
+    std::array<int, kNumPlayers> cards_to_take_{};
+    int talon_taken_count_ = 0;
+    std::vector<double> rewards_ = {0.0, 0.0, 0.0, 0.0};
+    bool game_over_ = false;
   } talon_;
 
   struct SkartState {
-    Player current_player = 0;
-    std::array<int, kNumPlayers> hand_sizes{};
-    int cards_discarded = 0;
+    Player current_player_ = 0;
+    std::array<int, kNumPlayers> hand_sizes_{};
+    int cards_discarded_ = 0;
   } skart_;
 
   struct AnnouncementsState {
-    Player current_player = 0;
-    bool partner_called = false;
-    Player last_to_speak = 0;
-    bool first_round = true;
-    std::array<int, kNumPlayers> tarok_counts{};
+    Player current_player_ = 0;
+    bool partner_called_ = false;
+    Player last_to_speak_ = 0;
+    bool first_round_ = true;
+    std::array<int, kNumPlayers> tarok_counts_{};
     std::vector<AnnouncementType> mandatory_announcements_;
   } announcements_;
 
   struct PlayState {
-    Player current_player = 0;
-    Player trick_caller = 0;
-    std::vector<Card> trick_cards;
-    int round = 0;
+    Player current_player_ = 0;
+    Player trick_caller_ = 0;
+    std::vector<Card> trick_cards_;
+    int round_ = 0;
   } play_;
 };
 
@@ -243,7 +245,7 @@ class HungarianTarokGame : public Game {
   int MaxChanceOutcomes() const override { return kDeckSize; }
   int NumPlayers() const override;
   double MinUtility() const override { return -100'000; }
-  double MaxUtility() const override { return +100'000; }
+  double MaxUtility() const override { return 100'000; }
   absl::optional<double> UtilitySum() const override { return 0; }
   std::vector<int> ObservationTensorShape() const override;
   int MaxGameLength() const override;
@@ -253,8 +255,6 @@ class HungarianTarokGame : public Game {
   std::shared_ptr<Observer> MakeObserver(
       absl::optional<IIGObservationType> iig_obs_type,
       const GameParameters& params) const override;
-
- private:
 };
 
 }  // namespace hungarian_tarok

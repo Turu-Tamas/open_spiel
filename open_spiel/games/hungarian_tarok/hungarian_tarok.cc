@@ -15,11 +15,13 @@
 #include "open_spiel/games/hungarian_tarok/hungarian_tarok.h"
 
 #include <algorithm>
+#include <array>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "open_spiel/abseil-cpp/absl/algorithm/container.h"
 #include "open_spiel/abseil-cpp/absl/memory/memory.h"
 #include "open_spiel/abseil-cpp/absl/strings/str_cat.h"
 #include "open_spiel/abseil-cpp/absl/types/optional.h"
@@ -50,16 +52,12 @@ const GameType kGameType{/*short_name=*/"hungarian_tarok",
                          {}};
 
 std::shared_ptr<const Game> Factory(const GameParameters& params) {
-  return std::shared_ptr<const Game>(new HungarianTarokGame(params));
+  return std::make_shared<HungarianTarokGame>(params);
 }
 
 REGISTER_SPIEL_GAME(kGameType, Factory);
 
 RegisterSingleTensorObserver single_tensor(kGameType.short_name);
-}  // namespace
-
-namespace {
-
 class HungarianTarokObserver final : public Observer {
  public:
   explicit HungarianTarokObserver(IIGObservationType iig_obs_type)
@@ -125,8 +123,8 @@ HungarianTarokState::HungarianTarokState(std::shared_ptr<const Game> game)
   common_state_.trick_winners_.clear();
 
   // Initialize setup phase state.
-  setup_.player_hands_sizes.fill(0);
-  setup_.current_card = 0;
+  setup_.player_hands_sizes_.fill(0);
+  setup_.current_card_ = 0;
 }
 
 HungarianTarokState::HungarianTarokState(const HungarianTarokState& other)
@@ -140,7 +138,9 @@ HungarianTarokState::HungarianTarokState(const HungarianTarokState& other)
       announcements_(other.announcements_),
       play_(other.play_) {}
 
-int HungarianTarokState::CurrentPlayer() const { return PhaseCurrentPlayer(); }
+Player HungarianTarokState::CurrentPlayer() const {
+  return PhaseCurrentPlayer();
+}
 
 void HungarianTarokState::DoApplyAction(Action move) {
   SPIEL_CHECK_FALSE(IsTerminal());
