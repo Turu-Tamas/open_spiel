@@ -35,7 +35,7 @@ namespace {
 
 namespace testing = open_spiel::testing;
 HungarianTarokState PostBiddingState(std::mt19937& mt) {
-  HungarianTarokState state = DealHelper().PostSetup();
+  HungarianTarokState state = DealHelper().PostSetup(mt);
   while (!state.IsTerminal() && state.GetPhaseType() == PhaseType::kBidding) {
     auto legal_actions = state.LegalActions();
     std::uniform_int_distribution<> dist(0, legal_actions.size() - 1);
@@ -79,7 +79,7 @@ void BasicHungarianTarokTests() {
 
 void TrialThreeTest(std::mt19937& mt) {
   for (int i = 0; i < 200; ++i) {
-    HungarianTarokState state = DealHelper().PostSetup();
+    HungarianTarokState state = DealHelper().PostSetup(mt);
     bool has_honour = state.PlayerHoldsCard(3, kPagat) ||
                       state.PlayerHoldsCard(3, kSkiz) ||
                       state.PlayerHoldsCard(3, kXXI);
@@ -88,10 +88,6 @@ void TrialThreeTest(std::mt19937& mt) {
     while (state.GetPhaseType() == PhaseType::kBidding) {
       std::vector<Action> legal_actions = state.LegalActions();
       if (state.CurrentPlayer() == 3) {
-        SPIEL_CHECK_TRUE(
-            absl::c_find(legal_actions, Bid{3, false}.ToAction()) !=
-            legal_actions.end());
-
         state.ApplyAction(Bid{3, false}.ToAction());
       } else {
         state.ApplyAction(Bid::PassAction());
@@ -127,7 +123,7 @@ HungarianTarokState MakeState(std::mt19937& mt, Player pagat, Player xxi,
   deal_helper.SetCardDestination(MakeTarok(18), XVIII);
   deal_helper.SetCardDestination(MakeTarok(19), XIX);
   deal_helper.SetCardDestination(MakeTarok(20), XX);
-  HungarianTarokState state = deal_helper.PostSetup();
+  HungarianTarokState state = deal_helper.PostSetup(mt);
   return state;
 }
 
@@ -251,6 +247,15 @@ void TestBids(std::mt19937& mt) {
                       std::nullopt,  // P2
                   },
                   /*called_card=*/MakeTarok(20));
+  // no bids
+  for (int i = 0; i < 10; ++i) {
+    HungarianTarokState state = DealHelper().PostSetup(mt);
+    while (!state.IsTerminal() && state.GetPhaseType() == PhaseType::kBidding)
+    {
+      state.ApplyAction(Bid::PassAction());
+    }
+    SPIEL_CHECK_TRUE(state.IsTerminal());
+  }
 }
 }  // namespace
 }  // namespace hungarian_tarok

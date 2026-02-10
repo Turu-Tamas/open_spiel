@@ -182,6 +182,7 @@ void HungarianTarokState::AdvancePhase() {
       int bidder_count = absl::c_count(bidding_.has_bid_, true);
       common_state_.full_bid_ = (bidder_count == 3);
       common_state_.winning_bid_ = bidding_.winning_bid_.number;
+      common_state_.declarer_ = bidding_.last_bidder_.value();
       common_state_.trial_three_ =
           common_state_.declarer_ == 3 && !bidding_.can_bid_[3];
       current_phase_ = PhaseType::kTalon;
@@ -255,7 +256,6 @@ std::string HungarianTarokState::SetupToString() const { return "Setup Phase"; }
 void HungarianTarokState::StartBiddingPhase() {
   bidding_ = BiddingState{};
 
-  common_state_.declarer_ = 0;
   common_state_.winning_bid_ = -1;
   common_state_.full_bid_ = false;
   common_state_.declarer_side_ = CommonState::AnnouncementSide{};
@@ -410,7 +410,7 @@ void HungarianTarokState::BiddingDoApplyAction(Action action) {
       bidding_.winning_bid_.GetBidTypeOf(action, player_first_bid);
   bidding_.winning_bid_ = Bid::FromAction(action);
   bidding_.has_bid_[bidding_.current_player_] = true;
-  common_state_.declarer_ = bidding_.current_player_;
+  bidding_.last_bidder_ = bidding_.current_player_;
 
   if (bidding_.bid_type_ != BidType::kStandard) {
     // someone bid after cue bid, accepting it, making
@@ -443,12 +443,12 @@ void HungarianTarokState::BiddingNextPlayer() {
   Player next_player = (bidding_.current_player_ + 1) % kNumPlayers;
   while (bidding_.has_passed_[next_player] &&
          next_player != bidding_.current_player_ &&
-         next_player != common_state_.declarer_) {
+         next_player != bidding_.last_bidder_) {
     next_player = (next_player + 1) % kNumPlayers;
   }
 
-  if (next_player == common_state_.declarer_) {
-    // Back to declarer, bidding over.
+  if (next_player == bidding_.last_bidder_) {
+    // Back to last bidder, bidding over.
     bidding_.current_player_ = kTerminalPlayerId;
     return;
   }

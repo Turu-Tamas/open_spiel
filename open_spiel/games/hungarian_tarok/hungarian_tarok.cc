@@ -239,7 +239,7 @@ std::vector<Card> HungarianTarokState::PlayerHand(Player player) const {
   return hand;
 }
 
-HungarianTarokState DealHelper::PostSetup() {
+HungarianTarokState DealHelper::PostSetup(std::mt19937& rng) {
   auto game = LoadGame("hungarian_tarok");
   HungarianTarokState state(game);
 
@@ -271,19 +271,20 @@ HungarianTarokState DealHelper::PostSetup() {
             "DealHelper: Cannot deal card to requested player - hand is full");
       }
     } else {
-      target_player = -1;
+      std::vector<Player> eligible;
       for (Action action : legal_actions) {
         Player p = static_cast<Player>(action);
         int room = kPlayerHandSize - current_card_counts[p];
         if (room > destined_remaining[p]) {
-          target_player = p;
-          break;
+          eligible.push_back(p);
         }
       }
-      if (target_player == -1) {  // should be impossible
+      if (eligible.empty()) {
         SpielFatalError(
             "DealHelper: Cannot deal card to any player - all hands full");
       }
+      std::uniform_int_distribution<int> dist(0, eligible.size() - 1);
+      target_player = eligible[dist(rng)];
     }
 
     state.ApplyAction(target_player);

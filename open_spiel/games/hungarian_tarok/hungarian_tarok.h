@@ -20,6 +20,7 @@
 #include <array>
 #include <memory>
 #include <optional>
+#include <random>
 #include <string>
 #include <utility>
 #include <vector>
@@ -53,7 +54,7 @@ class DealHelper {
     card_destinations_[card] = player;
   }
 
-  HungarianTarokState PostSetup();
+  HungarianTarokState PostSetup(std::mt19937& rng);
 
  private:
   std::array<std::optional<Player>, kDeckSize> card_destinations_;
@@ -201,6 +202,7 @@ class HungarianTarokState : public State {
     std::array<bool, kNumPlayers> has_bid_{};
     std::array<bool, kNumPlayers> has_passed_{};
     BidType bid_type_ = BidType::kStandard;
+    std::optional<Player> last_bidder_ = std::nullopt;
   } bidding_;
 
   struct TalonState {
