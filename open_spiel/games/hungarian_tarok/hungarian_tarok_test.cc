@@ -34,12 +34,15 @@ namespace hungarian_tarok {
 namespace {
 
 namespace testing = open_spiel::testing;
-void PlayTalonAndSkart(std::mt19937& mt, HungarianTarokState& post_bidding) {
+void PlayTalonSkartAndAnnulments(std::mt19937& mt, HungarianTarokState& post_bidding) {
   HungarianTarokState& state = post_bidding;
   while (state.GetPhaseType() == PhaseType::kTalon) {
     auto outcomes = state.ChanceOutcomes();
     Action action = SampleAction(outcomes, mt).first;
     state.ApplyAction(action);
+  }
+  while (state.GetPhaseType() == PhaseType::kAnnulments) {
+    state.ApplyAction(kDontAnnul);
   }
   while (state.GetPhaseType() == PhaseType::kSkart) {
     auto legal_actions = state.LegalActions();
@@ -238,9 +241,7 @@ void TestBids(std::mt19937& mt) {
 
 void TestTuletroa(std::mt19937& mt) {
   const Action kAnnounceTuletroa =
-      AnnouncementAction{AnnouncementType::kTuletroa,
-                         AnnouncementAction::Level::kAnnounce}
-          .ToAction();
+      AnnouncementAction::AnnounceAction(AnnouncementType::kTuletroa);
   constexpr Player kPlayerXVIII = 1;
   constexpr Player kPlayerXIX = 2;
   constexpr Player kPlayerXX = 2;
@@ -253,7 +254,7 @@ void TestTuletroa(std::mt19937& mt) {
         MakeState(mt, pagat, xxi, skiz,
                   /*XVIII=*/kPlayerXVIII, /*XIX=*/kPlayerXIX, /*XX=*/kPlayerXX),
         mt, bids, called_card);
-    PlayTalonAndSkart(mt, state);
+    PlayTalonSkartAndAnnulments(mt, state);
     state.ApplyAction(kAnnouncementsActionCallPartner);
     if (pass_until.has_value()) {
       while (state.CurrentPlayer() != *pass_until) {

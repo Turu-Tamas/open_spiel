@@ -134,6 +134,7 @@ HungarianTarokState::HungarianTarokState(const HungarianTarokState& other)
       setup_(other.setup_),
       bidding_(other.bidding_),
       talon_(other.talon_),
+  annulments_(other.annulments_),
       skart_(other.skart_),
       announcements_(other.announcements_),
       play_(other.play_) {}

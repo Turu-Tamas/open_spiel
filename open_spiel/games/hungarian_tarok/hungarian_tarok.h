@@ -143,6 +143,16 @@ class HungarianTarokState : public State {
   std::vector<double> TalonReturns() const;
   bool TalonGameOver() const;
 
+  // Annulments
+  Player AnnulmentsCurrentPlayer() const;
+  std::vector<Action> AnnulmentsLegalActions() const;
+  void AnnulmentsDoApplyAction(Action action);
+  bool AnnulmentsPhaseOver() const;
+  std::string AnnulmentsActionToString(Player player, Action action) const;
+  std::string AnnulmentsToString() const;
+  bool AnnulmentsGameOver() const;
+  void StartAnnulmentsPhase();
+
   // Skart.
   Player SkartCurrentPlayer() const;
   std::vector<Action> SkartLegalActions() const;
@@ -214,6 +224,11 @@ class HungarianTarokState : public State {
     std::vector<double> rewards_ = {0.0, 0.0, 0.0, 0.0};
     bool game_over_ = false;
   } talon_;
+
+  struct AnnulmentsState {
+    Player current_player_ = 0;
+    bool annulment_called_ = false;
+  } annulments_;
 
   struct SkartState {
     Player current_player_ = 0;

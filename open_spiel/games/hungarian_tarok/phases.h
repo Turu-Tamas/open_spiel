@@ -69,6 +69,10 @@ struct Bid {
 constexpr Action kAnnouncementsActionCallPartner = 0;
 constexpr Action kAnnouncementsActionCallSelf = 1;
 
+constexpr Action kDontAnnul = 0;
+constexpr Action kAnnulTaroks = 1;
+constexpr Action kAnnulKings = 2;
+
 constexpr int kMaxContraLevel = 5;
 
 const int kNumAnnouncementTypes = 8;
@@ -96,6 +100,7 @@ enum class PhaseType {
   kSetup,
   kBidding,
   kTalon,
+  kAnnulments,
   kSkart,
   kAnnouncements,
   kPlay

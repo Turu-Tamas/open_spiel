@@ -17,6 +17,9 @@ std::ostream& operator<<(std::ostream& os, const PhaseType& phase) {
     case PhaseType::kSetup:
       os << "Setup";
       break;
+    case PhaseType::kAnnulments:
+      os << "Annulments";
+      break;
     case PhaseType::kBidding:
       os << "Bidding";
       break;
@@ -46,6 +49,8 @@ Player HungarianTarokState::PhaseCurrentPlayer() const {
       return BiddingCurrentPlayer();
     case PhaseType::kTalon:
       return TalonCurrentPlayer();
+    case PhaseType::kAnnulments:
+      return AnnulmentsCurrentPlayer();
     case PhaseType::kSkart:
       return SkartCurrentPlayer();
     case PhaseType::kAnnouncements:
@@ -64,6 +69,8 @@ std::vector<Action> HungarianTarokState::PhaseLegalActions() const {
       return BiddingLegalActions();
     case PhaseType::kTalon:
       return TalonLegalActions();
+    case PhaseType::kAnnulments:
+      return AnnulmentsLegalActions();
     case PhaseType::kSkart:
       return SkartLegalActions();
     case PhaseType::kAnnouncements:
@@ -82,6 +89,8 @@ void HungarianTarokState::PhaseDoApplyAction(Action action) {
       return BiddingDoApplyAction(action);
     case PhaseType::kTalon:
       return TalonDoApplyAction(action);
+    case PhaseType::kAnnulments:
+      return AnnulmentsDoApplyAction(action);
     case PhaseType::kSkart:
       return SkartDoApplyAction(action);
     case PhaseType::kAnnouncements:
@@ -100,6 +109,8 @@ bool HungarianTarokState::PhaseOver() const {
       return BiddingPhaseOver();
     case PhaseType::kTalon:
       return TalonPhaseOver();
+    case PhaseType::kAnnulments:
+      return AnnulmentsPhaseOver();
     case PhaseType::kSkart:
       return SkartPhaseOver();
     case PhaseType::kAnnouncements:
@@ -112,6 +123,8 @@ bool HungarianTarokState::PhaseOver() const {
 
 bool HungarianTarokState::GameOver() const {
   switch (current_phase_) {
+    case PhaseType::kAnnulments:
+      return AnnulmentsGameOver();
     case PhaseType::kBidding:
       return BiddingGameOver();
     case PhaseType::kPlay:
@@ -143,6 +156,8 @@ std::string HungarianTarokState::PhaseActionToString(Player player,
       return BiddingActionToString(player, action);
     case PhaseType::kTalon:
       return TalonActionToString(player, action);
+    case PhaseType::kAnnulments:
+      return AnnulmentsActionToString(player, action);
     case PhaseType::kSkart:
       return SkartActionToString(player, action);
     case PhaseType::kAnnouncements:
@@ -161,6 +176,8 @@ std::string HungarianTarokState::PhaseToString() const {
       return BiddingToString();
     case PhaseType::kTalon:
       return TalonToString();
+    case PhaseType::kAnnulments:
+      return AnnulmentsToString();
     case PhaseType::kSkart:
       return SkartToString();
     case PhaseType::kAnnouncements:
@@ -190,6 +207,10 @@ void HungarianTarokState::AdvancePhase() {
       return;
     }
     case PhaseType::kTalon:
+      current_phase_ = PhaseType::kAnnulments;
+      StartAnnulmentsPhase();
+      return;
+    case PhaseType::kAnnulments:
       current_phase_ = PhaseType::kSkart;
       StartSkartPhase();
       return;
@@ -205,6 +226,10 @@ void HungarianTarokState::AdvancePhase() {
       SpielFatalError("No next phase after play");
   }
   SpielFatalError("Unknown phase type");
+}
+
+void HungarianTarokState::StartAnnulmentsPhase() {
+  annulments_ = AnnulmentsState{};
 }
 
 // Setup.
@@ -500,6 +525,77 @@ std::string HungarianTarokState::BiddingActionToString(Player player,
 
 std::string HungarianTarokState::BiddingToString() const {
   return "Bidding Phase";
+}
+
+// Annulments.
+Player HungarianTarokState::AnnulmentsCurrentPlayer() const {
+  return annulments_.current_player_;
+}
+
+std::vector<Action> HungarianTarokState::AnnulmentsLegalActions() const {
+  SPIEL_CHECK_FALSE(AnnulmentsPhaseOver());
+  std::vector<Action> actions = {kDontAnnul};
+  std::vector<Card> hand = PlayerHand(annulments_.current_player_);
+  int tarok_count = absl::c_count_if(hand, [](Card card) {
+    return CardSuit(card) == Suit::kTarok && card != kXXI && card != kPagat;
+  });
+  int king_count = absl::c_count_if(hand, [](Card card) {
+    return CardSuit(card) != Suit::kTarok &&
+           CardSuitRank(card) == SuitRank::kKing;
+  });
+  if (tarok_count == 0)
+    actions.push_back(kAnnulTaroks);
+  if (king_count == 4)
+    actions.push_back(kAnnulKings);
+  return actions;
+}
+
+void HungarianTarokState::AnnulmentsDoApplyAction(Action action) {
+  SPIEL_CHECK_FALSE(AnnulmentsPhaseOver());
+  std::vector<Action> legal_actions = AnnulmentsLegalActions();
+  SPIEL_CHECK_TRUE(absl::c_find(legal_actions, action) != legal_actions.end());
+
+  if (action == kDontAnnul) {
+    annulments_.current_player_ =
+        (annulments_.current_player_ + 1) % kNumPlayers;
+    if (annulments_.current_player_ == 0) {
+      // all players had the chance to annul, move on
+      annulments_.current_player_ = kTerminalPlayerId;
+    }
+    return;
+  }
+  annulments_.annulment_called_ = true;
+  annulments_.current_player_ = kTerminalPlayerId;
+}
+
+bool HungarianTarokState::AnnulmentsPhaseOver() const {
+  return annulments_.current_player_ == kTerminalPlayerId;
+}
+
+std::string HungarianTarokState::AnnulmentsActionToString(Player player,
+                                                          Action action) const {
+  SPIEL_CHECK_FALSE(AnnulmentsPhaseOver());
+  std::vector<Action> legal_actions = AnnulmentsLegalActions();
+  SPIEL_CHECK_TRUE(absl::c_find(legal_actions, action) != legal_actions.end());
+
+  switch (action) {
+    case kDontAnnul:
+      return "Don't annul";
+    case kAnnulTaroks:
+      return "Annul without taroks";
+    case kAnnulKings:
+      return "Annul with four kings";
+    default:
+      SpielFatalError("Unknown action");
+  }
+}
+
+bool HungarianTarokState::AnnulmentsGameOver() const {
+  return annulments_.annulment_called_;
+}
+
+std::string HungarianTarokState::AnnulmentsToString() const {
+  return "Annulments Phase";
 }
 
 // Talon dealing.
