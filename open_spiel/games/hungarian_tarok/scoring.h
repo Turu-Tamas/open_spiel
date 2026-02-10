@@ -115,7 +115,7 @@ inline std::optional<Side> XXICatchWinnerSide(const CommonState& game_data) {
 }
 
 inline std::array<int, kNumPlayers> CalculateScores(
-  const CommonState& game_data) {
+    const CommonState& game_data) {
   const int kGameBaseScore = 4 - game_data.winning_bid_;
   const int kTuletroaScore = 1;
   const int kFourKingsScore = 1;

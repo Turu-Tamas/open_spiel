@@ -53,6 +53,11 @@ constexpr Suit CardSuit(Card card) {
              ? Suit::kTarok
              : static_cast<Suit>((card - kNumTaroks) / kNumRanksPerSuit);
 }
+constexpr SuitRank CardSuitRank(Card card) {
+  SPIEL_CHECK_LT(card, kDeckSize);
+  SPIEL_CHECK_NE(CardSuit(card), Suit::kTarok);
+  return static_cast<SuitRank>((card - kNumTaroks) % kNumRanksPerSuit);
+}
 bool CardBeats(Card a, Card b);
 constexpr int CardPointValue(const Card card) {
   SPIEL_CHECK_LT(card, kDeckSize);
@@ -64,8 +69,7 @@ constexpr int CardPointValue(const Card card) {
     return 1;
   } else {
     // suit cards
-    SuitRank rank =
-        static_cast<SuitRank>((card - kNumTaroks) % kNumRanksPerSuit);
+    SuitRank rank = CardSuitRank(card);
     switch (rank) {
       case SuitRank::kKing:
         return 5;

@@ -421,8 +421,10 @@ void HungarianTarokState::BiddingDoApplyAction(Action action) {
         !PlayerHoldsOneOf(common_state_.cue_bidder_.value(), {kXXI, kSkiz});
   }
   // after a cue bid was already made, nothing counts as cue bid
-  if (bid_type != BidType::kStandard &&
-      bidding_.bid_type_ == BidType::kStandard) {
+  if (bid_type == BidType::kStraightSolo) {
+    bidding_.bid_type_ = BidType::kStraightSolo;
+  } else if (bid_type != BidType::kStandard &&
+             bidding_.bid_type_ == BidType::kStandard) {
     // dont bid again after making a cue bid
     bidding_.can_bid_[bidding_.current_player_] = false;
     bidding_.has_passed_[bidding_.current_player_] = true;
@@ -629,9 +631,16 @@ Player HungarianTarokState::SkartCurrentPlayer() const {
 std::vector<Action> HungarianTarokState::SkartLegalActions() const {
   SPIEL_CHECK_FALSE(SkartPhaseOver());
   std::vector<Action> actions;
+
   for (Card card = 0; card < kDeckSize; ++card) {
-    if (common_state_.deck_[card] ==
-        PlayerHandLocation(skart_.current_player_)) {
+    const std::optional<Card> mandatory = common_state_.mandatory_called_card_;
+    if (IsHonour(card)) continue;
+    if (card == common_state_.mandatory_called_card_) continue;
+    if (!mandatory.has_value() && card == MakeTarok(20)) continue;
+    if (CardSuit(card) != Suit::kTarok && CardSuitRank(card) == SuitRank::kKing)
+      continue;
+
+    if (PlayerHoldsCard(skart_.current_player_, card)) {
       actions.push_back(card);
     }
   }
@@ -641,8 +650,7 @@ std::vector<Action> HungarianTarokState::SkartLegalActions() const {
 void HungarianTarokState::SkartDoApplyAction(Action action) {
   SPIEL_CHECK_GE(action, 0);
   SPIEL_CHECK_LT(action, kDeckSize);
-  SPIEL_CHECK_EQ(common_state_.deck_[action],
-                 PlayerHandLocation(skart_.current_player_));
+  SPIEL_CHECK_TRUE(PlayerHoldsCard(skart_.current_player_, action));
   SPIEL_CHECK_FALSE(SkartPhaseOver());
 
   if (skart_.current_player_ == common_state_.declarer_) {
@@ -778,6 +786,16 @@ bool HungarianTarokState::CanAnnounceTuletroa() const {
       common_state_.mandatory_called_card_.has_value()) {
     return PlayerHoldsCard(common_state_.declarer_, kXXI) ||
            PlayerHoldsCard(common_state_.declarer_, kSkiz);
+  }
+  // as cue bidder, if declarer did not announce tuletroa, you may do so if you
+  // have two honours
+  if (announcements_.current_player_ == common_state_.cue_bidder_ &&
+      !CurrentAnnouncementSide()
+           .announced[static_cast<int>(AnnouncementType::kTuletroa)]) {
+    const std::vector<Card> honours{kPagat, kSkiz, kXXI};
+    return absl::c_count_if(honours, [&](Card card) {
+             return PlayerHoldsCard(announcements_.current_player_, card);
+           }) == 2;
   }
   // in a full bid, declarer can only announce tuletroa if they have the skiz
   if (common_state_.full_bid_ && is_declarer && announcements_.first_round_) {
@@ -1104,7 +1122,7 @@ void HungarianTarokState::ResolveTrick() {
   }
 
   CommonState::Trick trick;
-  std::copy(play_.trick_cards_.begin(), play_.trick_cards_.end(), trick.begin());
+  absl::c_copy(play_.trick_cards_, trick.begin());
   common_state_.tricks_.push_back(trick);
   common_state_.trick_winners_.push_back(trick_winner);
   play_.trick_cards_.clear();

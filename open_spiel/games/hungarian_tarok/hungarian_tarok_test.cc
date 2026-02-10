@@ -21,41 +21,26 @@
 #include <vector>
 
 #include "open_spiel/game_parameters.h"
+#include "open_spiel/games/hungarian_tarok/phases.h"
 #include "open_spiel/observer.h"
 #include "open_spiel/policy.h"
 #include "open_spiel/spiel.h"
 #include "open_spiel/spiel_utils.h"
 #include "open_spiel/tests/basic_tests.h"
 #include "open_spiel/tests/console_play_test.h"
-#include "open_spiel/games/hungarian_tarok/phases.h"
 
 namespace open_spiel {
 namespace hungarian_tarok {
 namespace {
 
 namespace testing = open_spiel::testing;
-HungarianTarokState PostBiddingState(std::mt19937& mt) {
-  HungarianTarokState state = DealHelper().PostSetup(mt);
-  while (!state.IsTerminal() && state.GetPhaseType() == PhaseType::kBidding) {
-    auto legal_actions = state.LegalActions();
-    std::uniform_int_distribution<> dist(0, legal_actions.size() - 1);
-    state.ApplyAction(legal_actions[dist(mt)]);
-  }
-  return state;
-}
-
-HungarianTarokState PostTalonState(std::mt19937& mt) {
-  HungarianTarokState state = PostBiddingState(mt);
-  while (!state.IsTerminal() && state.GetPhaseType() == PhaseType::kTalon) {
-    SPIEL_CHECK_EQ(state.CurrentPlayer(), kChancePlayerId);
+void PlayTalonAndSkart(std::mt19937& mt, HungarianTarokState& post_bidding) {
+  HungarianTarokState& state = post_bidding;
+  while (state.GetPhaseType() == PhaseType::kTalon) {
     auto outcomes = state.ChanceOutcomes();
-    state.ApplyAction(SampleAction(outcomes, mt).first);
+    Action action = SampleAction(outcomes, mt).first;
+    state.ApplyAction(action);
   }
-  return state;
-}
-
-HungarianTarokState PostSkartState(std::mt19937& mt) {
-  HungarianTarokState state = PostTalonState(mt);
   while (state.GetPhaseType() == PhaseType::kSkart) {
     auto legal_actions = state.LegalActions();
     SPIEL_CHECK_FALSE(legal_actions.empty());
@@ -63,7 +48,7 @@ HungarianTarokState PostSkartState(std::mt19937& mt) {
         0, static_cast<int>(legal_actions.size()) - 1);
     state.ApplyAction(legal_actions[dist(mt)]);
   }
-  return state;
+  SPIEL_CHECK_EQ(state.GetPhaseType(), PhaseType::kAnnouncements);
 }
 
 void BasicHungarianTarokTests() {
@@ -146,12 +131,6 @@ HungarianTarokState TestBidSequence(
   SPIEL_CHECK_EQ(state.GetPhaseType(), PhaseType::kTalon);
   SPIEL_CHECK_EQ(state.MandatoryCalledCard(), called_card);
   return state;
-}
-
-void ConsolePlayHungariantarokTest() {
-  std::mt19937 mt(1234);
-  HungarianTarokState state = PostSkartState(mt);
-  testing::ConsolePlayTest(*LoadGame("hungarian_tarok"), &state);
 }
 
 void TestBids(std::mt19937& mt) {
@@ -250,13 +229,93 @@ void TestBids(std::mt19937& mt) {
   // no bids
   for (int i = 0; i < 10; ++i) {
     HungarianTarokState state = DealHelper().PostSetup(mt);
-    while (!state.IsTerminal() && state.GetPhaseType() == PhaseType::kBidding)
-    {
+    while (!state.IsTerminal() && state.GetPhaseType() == PhaseType::kBidding) {
       state.ApplyAction(Bid::PassAction());
     }
     SPIEL_CHECK_TRUE(state.IsTerminal());
   }
 }
+
+void TestTuletroa(std::mt19937& mt) {
+  const Action kAnnounceTuletroa =
+      AnnouncementAction{AnnouncementType::kTuletroa,
+                         AnnouncementAction::Level::kAnnounce}
+          .ToAction();
+  constexpr Player kPlayerXVIII = 1;
+  constexpr Player kPlayerXIX = 2;
+  constexpr Player kPlayerXX = 2;
+
+  auto check_tuletroa = [&](Player pagat, Player xxi, Player skiz,
+                            std::vector<std::optional<Bid>> bids, bool expected,
+                            std::optional<Player> pass_until = std::nullopt,
+                            std::optional<Card> called_card = std::nullopt) {
+    HungarianTarokState state = TestBidSequence(
+        MakeState(mt, pagat, xxi, skiz,
+                  /*XVIII=*/kPlayerXVIII, /*XIX=*/kPlayerXIX, /*XX=*/kPlayerXX),
+        mt, bids, called_card);
+    PlayTalonAndSkart(mt, state);
+    state.ApplyAction(kAnnouncementsActionCallPartner);
+    if (pass_until.has_value()) {
+      while (state.CurrentPlayer() != *pass_until) {
+        state.ApplyAction(AnnouncementAction::PassAction());
+      }
+    }
+    std::vector<Action> legal_actions = state.LegalActions();
+    bool has_tuletroa =
+        absl::c_find(legal_actions, kAnnounceTuletroa) != legal_actions.end();
+    SPIEL_CHECK_EQ(has_tuletroa, expected);
+  };
+
+  const std::vector<std::optional<Bid>> kSimpleBid = {
+      std::nullopt, Bid{3, false}, std::nullopt, std::nullopt};
+  const std::vector<std::optional<Bid>> kFullBid = {
+      std::nullopt, Bid{3, false}, Bid{2, false}, Bid{1, false},
+      std::nullopt,  // P1
+      std::nullopt,  // P2
+  };
+  const std::vector<std::optional<Bid>> kXIXInvitBid = {
+      std::nullopt, Bid{3, false}, Bid{1, false},
+      std::nullopt, Bid{1, true},  // P1
+  };
+  const Player kDeclarer = 1;
+  const Player kPartner = 2;
+
+  // tuletroa as partner with XXI + Skiz
+  check_tuletroa(/*pagat=*/0, /*xxi=*/1, /*skiz=*/1, kSimpleBid, true);
+  // no tuletroa as declarer without XXI + Skiz
+  check_tuletroa(/*pagat=*/0, /*xxi=*/1, /*skiz=*/2, kSimpleBid, false);
+
+  // tuletroa as partner with skiz
+  check_tuletroa(/*pagat=*/1, /*xxi=*/0, /*skiz=*/2, kSimpleBid, true,
+                 /*pass_until=*/kPartner);
+
+  // no tuletroa as partner with pagat
+  check_tuletroa(/*pagat=*/2, /*xxi=*/1, /*skiz=*/0, kSimpleBid, false,
+                 /*pass_until=*/kPartner);
+  // tuletroa after full bid as declarer with Skiz
+  check_tuletroa(/*pagat=*/2, /*xxi=*/1, /*skiz=*/3, kFullBid, true);
+
+  // no tuletroa after full bid as declarer with XXI
+  check_tuletroa(/*pagat=*/2, /*xxi=*/3, /*skiz=*/1, kFullBid, false);
+  // tuletroa after full bid as partner with XXI
+  check_tuletroa(/*pagat=*/1, /*xxi=*/2, /*skiz=*/3, kFullBid, true,
+                 /*pass_until=*/kPartner);
+
+  // tuletroa as declarer with XXI OR Skiz after cue bid
+  check_tuletroa(/*pagat=*/2, /*xxi=*/1, /*skiz=*/3, kXIXInvitBid, true,
+                 /*pass_until=*/kDeclarer, /*called_card=*/MakeTarok(19));
+  // no tuletroa as declarer without XXI or Skiz after cue bid
+  check_tuletroa(/*pagat=*/1, /*xxi=*/2, /*skiz=*/3, kXIXInvitBid, false,
+                 /*pass_until=*/kDeclarer, /*called_card=*/MakeTarok(19));
+
+  // tuletroa as partner (cue bidder) with two honours after cue bid
+  check_tuletroa(/*pagat=*/2, /*xxi=*/2, /*skiz=*/1, kXIXInvitBid, true,
+                 /*pass_until=*/kPartner, /*called_card=*/MakeTarok(19));
+  // no tuletroa as partner (cue bidder) with one honour after cue bid
+  check_tuletroa(/*pagat=*/1, /*xxi=*/2, /*skiz=*/3, kXIXInvitBid, false,
+                 /*pass_until=*/kPartner, /*called_card=*/MakeTarok(19));
+}
+
 }  // namespace
 }  // namespace hungarian_tarok
 }  // namespace open_spiel
@@ -265,6 +324,7 @@ int main(int /*argc*/, char** /*argv*/) {
   std::mt19937 mt(42);
 
   open_spiel::hungarian_tarok::TestBids(mt);
+  open_spiel::hungarian_tarok::TestTuletroa(mt);
   open_spiel::hungarian_tarok::TrialThreeTest(mt);
   open_spiel::hungarian_tarok::BasicHungarianTarokTests();
   // open_spiel::hungarian_tarok::ConsolePlayHungariantarokTest();
