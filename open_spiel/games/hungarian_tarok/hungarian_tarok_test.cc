@@ -239,12 +239,12 @@ void TestBids(std::mt19937& mt) {
                             /*XVIII=*/1, /*XIX=*/1, /*XX=*/2),
                   mt,
                   {
-                    std::nullopt,
-                    std::nullopt,
-                    Bid{3, false},
-                    Bid{2, false},
+                      std::nullopt,
+                      std::nullopt,
+                      Bid{3, false},
+                      Bid{2, false},
 
-                    std::nullopt,  // P2
+                      std::nullopt,  // P2
                   },
                   /*called_card=*/MakeTarok(20));
 }
@@ -258,6 +258,7 @@ int main(int argc, char** argv) {
   std::shared_ptr<const open_spiel::Game> game =
       open_spiel::LoadGame("hungarian_tarok");
 
+  TestBids(mt);
   TrialThreeTest(mt);
   BasicHungariantarokTests();
   // ConsolePlayHungariantarokTest();

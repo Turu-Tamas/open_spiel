@@ -152,6 +152,7 @@ struct CommonState {
                               // without an honour
   std::optional<Card> mandatory_called_card_;
   std::optional<Player> cue_bidder_ = std::nullopt;
+  bool mandatory_pagatulti_ = false;
 
   // announcements results
   std::optional<Player> partner_;

@@ -377,7 +377,8 @@ std::vector<Action> HungarianTarokState::BiddingLegalActions() const {
   // yielding game is illegal without XX
   if (!bidding_.has_bid[bidding_.current_player] ||
       bidding_.winning_bid_ != Bid{2, false} ||
-      PlayerHoldsCard(bidding_.current_player, MakeTarok(20))) {
+      (PlayerHoldsCard(bidding_.current_player, MakeTarok(20)) &&
+       PlayerHoldsOneOf(bidding_.current_player, {kXXI, kSkiz}))) {
     actions.push_back(Bid::PassAction());
   }
   return actions;
@@ -392,7 +393,8 @@ void HungarianTarokState::BiddingDoApplyAction(Action action) {
     bidding_.can_bid[bidding_.current_player] = false;
     bidding_.has_passed[bidding_.current_player] = true;
 
-    if (bidding_.has_bid[bidding_.current_player] && bidding_.winning_bid_ == Bid{2, false}) {
+    if (bidding_.has_bid[bidding_.current_player] &&
+        bidding_.winning_bid_ == Bid{2, false}) {
       // Yielded game, XX must be called
       bidding_.bid_type = BidType::kYieldedGame;
       common_state_.mandatory_called_card_ = MakeTarok(20);
@@ -414,6 +416,9 @@ void HungarianTarokState::BiddingDoApplyAction(Action action) {
     // someone bid after cue bid, accepting it, making
     // calling the indicated card mandatory
     common_state_.mandatory_called_card_ = IndicatedCard(bidding_.bid_type);
+    // mandatory pagatulti after cue bid with pagat
+    common_state_.mandatory_pagatulti_ =
+        !PlayerHoldsOneOf(common_state_.cue_bidder_.value(), {kXXI, kSkiz});
   }
   // after a cue bid was already made, nothing counts as cue bid
   if (bid_type != BidType::kStandard &&
@@ -674,6 +679,36 @@ std::string HungarianTarokState::SkartToString() const {
 }
 
 // Announcements.
+namespace {
+
+constexpr std::array<const char*, kNumAnnouncementTypes> kAnnouncementTypeNames{
+    "Four Kings",   "Tuletroa",    "Double Game",  "Volat",
+    "Pagat Ultimo", "XXI Capture", "Eight Taroks", "Nine Taroks"};
+
+const char* AnnouncementLevelPrefix(AnnouncementAction::Level level) {
+  switch (level) {
+    case AnnouncementAction::Level::kAnnounce:
+      return "Announce ";
+    case AnnouncementAction::Level::kContra:
+      return "Contra ";
+    case AnnouncementAction::Level::kReContra:
+      return "Re-Contra ";
+  }
+  SpielFatalError("Unknown announcement level");
+}
+
+bool IsContraAllowedFor(AnnouncementType type) {
+  return type != AnnouncementType::kEightTaroks &&
+         type != AnnouncementType::kNineTaroks;
+}
+
+bool IsBlockedByVolat(AnnouncementType type) {
+  return type == AnnouncementType::kFourKings ||
+         type == AnnouncementType::kDoubleGame;
+}
+
+}  // namespace
+
 void HungarianTarokState::StartAnnouncementsPhase() {
   common_state_.partner_ = std::nullopt;
   announcements_ = AnnouncementsState{};
@@ -762,6 +797,63 @@ bool HungarianTarokState::CanAnnounceTuletroa() const {
   return true;
 }
 
+bool HungarianTarokState::CanAnnounceType(AnnouncementType type) const {
+  const CommonState::AnnouncementSide& current_side = CurrentAnnouncementSide();
+  const int type_index = static_cast<int>(type);
+  if (current_side.announced[type_index]) return false;
+
+  if (type == AnnouncementType::kTuletroa) {
+    return CanAnnounceTuletroa();
+  }
+
+  if (type == AnnouncementType::kEightTaroks) {
+    return announcements_.tarok_counts[announcements_.current_player] == 8;
+  }
+  if (type == AnnouncementType::kNineTaroks) {
+    return announcements_.tarok_counts[announcements_.current_player] == 9;
+  }
+
+  if (IsBlockedByVolat(type)) {
+    return !current_side.announced[static_cast<int>(AnnouncementType::kVolat)];
+  }
+
+  return true;
+}
+
+void HungarianTarokState::AddAnnounceActions(
+    std::vector<Action>& actions) const {
+  for (int i = 0; i < kNumAnnouncementTypes; ++i) {
+    const AnnouncementType type = static_cast<AnnouncementType>(i);
+    if (CanAnnounceType(type)) {
+      actions.push_back(AnnouncementAction::AnnounceAction(type));
+    }
+  }
+}
+
+void HungarianTarokState::AddContraActions(std::vector<Action>& actions) const {
+  const CommonState::AnnouncementSide& other_side = OtherAnnouncementSide();
+  for (int i = 0; i < kNumAnnouncementTypes; ++i) {
+    const AnnouncementType type = static_cast<AnnouncementType>(i);
+    if (!IsContraAllowedFor(type)) continue;
+    if (other_side.announced[i] && other_side.contra_level[i] % 2 == 0 &&
+        other_side.contra_level[i] <= kMaxContraLevel) {
+      actions.push_back(AnnouncementAction::ContraAction(type));
+    }
+  }
+}
+
+void HungarianTarokState::AddReContraActions(
+    std::vector<Action>& actions) const {
+  const CommonState::AnnouncementSide& current_side = CurrentAnnouncementSide();
+  for (int i = 0; i < kNumAnnouncementTypes; ++i) {
+    const AnnouncementType type = static_cast<AnnouncementType>(i);
+    if (current_side.contra_level[i] % 2 == 1 &&
+        current_side.contra_level[i] <= kMaxContraLevel) {
+      actions.push_back(AnnouncementAction::ReContraAction(type));
+    }
+  }
+}
+
 std::vector<Action> HungarianTarokState::AnnouncementsLegalActions() const {
   SPIEL_CHECK_FALSE(AnnouncementsPhaseOver());
   if (!announcements_.partner_called) {
@@ -773,62 +865,13 @@ std::vector<Action> HungarianTarokState::AnnouncementsLegalActions() const {
   }
 
   std::vector<Action> actions;
-  const CommonState::AnnouncementSide& current_side = CurrentAnnouncementSide();
-  const CommonState::AnnouncementSide& other_side = OtherAnnouncementSide();
+  AddAnnounceActions(actions);
+  AddContraActions(actions);
+  AddReContraActions(actions);
 
-  for (int i = 0; i < kNumAnnouncementTypes; ++i) {
-    AnnouncementType type = static_cast<AnnouncementType>(i);
-    if (current_side.announced[i]) continue;
-
-    switch (type) {
-      case AnnouncementType::kTuletroa:
-        if (CanAnnounceTuletroa()) {
-          actions.push_back(AnnouncementAction::AnnounceAction(type));
-        }
-        break;
-      case AnnouncementType::kEightTaroks:
-        if (announcements_.tarok_counts[announcements_.current_player] == 8) {
-          actions.push_back(AnnouncementAction::AnnounceAction(type));
-        }
-        break;
-      case AnnouncementType::kNineTaroks:
-        if (announcements_.tarok_counts[announcements_.current_player] == 9) {
-          actions.push_back(AnnouncementAction::AnnounceAction(type));
-        }
-        break;
-      case AnnouncementType::kFourKings:
-      case AnnouncementType::kDoubleGame:
-        if (!current_side
-                 .announced[static_cast<int>(AnnouncementType::kVolat)]) {
-          actions.push_back(AnnouncementAction::AnnounceAction(type));
-        }
-        break;
-      default:
-        actions.push_back(AnnouncementAction::AnnounceAction(type));
-    }
+  if (announcements_.mandatory_announcements_.empty()) {
+    actions.push_back(AnnouncementAction::PassAction());
   }
-
-  for (int i = 0; i < kNumAnnouncementTypes; ++i) {
-    AnnouncementType type = static_cast<AnnouncementType>(i);
-    if (type == AnnouncementType::kEightTaroks ||
-        type == AnnouncementType::kNineTaroks) {
-      continue;
-    }
-    if (other_side.announced[i] && other_side.contra_level[i] % 2 == 0 &&
-        other_side.contra_level[i] <= kMaxContraLevel) {
-      actions.push_back(AnnouncementAction::ContraAction(type));
-    }
-  }
-
-  for (int i = 0; i < kNumAnnouncementTypes; ++i) {
-    AnnouncementType type = static_cast<AnnouncementType>(i);
-    if (current_side.contra_level[i] % 2 == 1 &&
-        current_side.contra_level[i] <= kMaxContraLevel) {
-      actions.push_back(AnnouncementAction::ReContraAction(type));
-    }
-  }
-
-  actions.push_back(AnnouncementAction::PassAction());
   return actions;
 }
 
@@ -894,6 +937,13 @@ void HungarianTarokState::AnnouncementsDoApplyAction(Action action) {
     if (announcements_.current_player == common_state_.declarer_) {
       announcements_.first_round = false;
     }
+    if (common_state_.mandatory_pagatulti_ &&
+        announcements_.current_player == common_state_.partner_ &&
+        !CurrentAnnouncementSide()
+             .announced[static_cast<int>(AnnouncementType::kPagatUltimo)]) {
+      announcements_.mandatory_announcements_.push_back(
+          AnnouncementType::kPagatUltimo);
+    }
     return;
   }
 
@@ -913,6 +963,28 @@ void HungarianTarokState::AnnouncementsDoApplyAction(Action action) {
       break;
   }
   announcements_.last_to_speak = announcements_.current_player;
+
+  auto it =
+      absl::c_find(announcements_.mandatory_announcements_, ann_action.type);
+  if (it != announcements_.mandatory_announcements_.end()) {
+    announcements_.mandatory_announcements_.erase(it);
+  }
+
+  if (ann_action.type == AnnouncementType::kPagatUltimo &&
+      ann_action.level == AnnouncementAction::Level::kAnnounce) {
+    if (announcements_.tarok_counts[announcements_.current_player] == 8 &&
+        !CurrentAnnouncementSide()
+             .announced[static_cast<int>(AnnouncementType::kEightTaroks)]) {
+      announcements_.mandatory_announcements_.push_back(
+          AnnouncementType::kEightTaroks);
+    } else if (announcements_.tarok_counts[announcements_.current_player] ==
+                   9 &&
+               !CurrentAnnouncementSide().announced[static_cast<int>(
+                   AnnouncementType::kNineTaroks)]) {
+      announcements_.mandatory_announcements_.push_back(
+          AnnouncementType::kNineTaroks);
+    }
+  }
 }
 
 bool HungarianTarokState::AnnouncementsPhaseOver() const {
@@ -936,46 +1008,9 @@ std::string HungarianTarokState::AnnouncementsActionToString(
   }
 
   AnnouncementAction ann_action = AnnouncementAction::FromAction(action);
-  std::string level_str;
-  switch (ann_action.level) {
-    case AnnouncementAction::Level::kAnnounce:
-      level_str = "Announce ";
-      break;
-    case AnnouncementAction::Level::kContra:
-      level_str = "Contra ";
-      break;
-    case AnnouncementAction::Level::kReContra:
-      level_str = "Re-Contra ";
-      break;
-  }
-
-  std::string type_str;
-  switch (ann_action.type) {
-    case AnnouncementType::kFourKings:
-      type_str = "Four Kings";
-      break;
-    case AnnouncementType::kTuletroa:
-      type_str = "Tuletroa";
-      break;
-    case AnnouncementType::kDoubleGame:
-      type_str = "Double Game";
-      break;
-    case AnnouncementType::kVolat:
-      type_str = "Volat";
-      break;
-    case AnnouncementType::kPagatUltimo:
-      type_str = "Pagat Ultimo";
-      break;
-    case AnnouncementType::kXXICapture:
-      type_str = "XXI Capture";
-      break;
-    case AnnouncementType::kEightTaroks:
-      type_str = "Eight Taroks";
-      break;
-    case AnnouncementType::kNineTaroks:
-      type_str = "Nine Taroks";
-      break;
-  }
+  const char* level_str = AnnouncementLevelPrefix(ann_action.level);
+  const char* type_str =
+      kAnnouncementTypeNames[static_cast<int>(ann_action.type)];
   return absl::StrCat(level_str, type_str);
 }
 

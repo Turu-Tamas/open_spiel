@@ -82,6 +82,12 @@ class HungarianTarokState : public State {
   bool PlayerHoldsCard(Player player, Card card) const {
     return common_state_.deck_[card] == PlayerHandLocation(player);
   }
+  bool PlayerHoldsOneOf(Player player, const std::vector<Card>& cards) const {
+    for (Card card : cards) {
+      if (PlayerHoldsCard(player, card)) return true;
+    }
+    return false;
+  }
   std::optional<Card> MandatoryCalledCard() const {
     SPIEL_CHECK_TRUE(current_phase_ > PhaseType::kBidding);
     return common_state_.mandatory_called_card_;
@@ -158,6 +164,10 @@ class HungarianTarokState : public State {
   const CommonState::AnnouncementSide& CurrentAnnouncementSide() const;
   const CommonState::AnnouncementSide& OtherAnnouncementSide() const;
   bool CanAnnounceTuletroa() const;
+  bool CanAnnounceType(AnnouncementType type) const;
+  void AddAnnounceActions(std::vector<Action>& actions) const;
+  void AddContraActions(std::vector<Action>& actions) const;
+  void AddReContraActions(std::vector<Action>& actions) const;
 
   // Play.
   Player PlayCurrentPlayer() const;
@@ -213,6 +223,7 @@ class HungarianTarokState : public State {
     Player last_to_speak = 0;
     bool first_round = true;
     std::array<int, kNumPlayers> tarok_counts{};
+    std::vector<AnnouncementType> mandatory_announcements_;
   } announcements_;
 
   struct PlayState {
