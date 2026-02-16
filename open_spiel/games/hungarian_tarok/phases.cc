@@ -543,10 +543,8 @@ std::vector<Action> HungarianTarokState::AnnulmentsLegalActions() const {
     return CardSuit(card) != Suit::kTarok &&
            CardSuitRank(card) == SuitRank::kKing;
   });
-  if (tarok_count == 0)
-    actions.push_back(kAnnulTaroks);
-  if (king_count == 4)
-    actions.push_back(kAnnulKings);
+  if (tarok_count == 0) actions.push_back(kAnnulTaroks);
+  if (king_count == 4) actions.push_back(kAnnulKings);
   return actions;
 }
 
@@ -1252,7 +1250,8 @@ std::vector<double> HungarianTarokState::PlayReturns() const {
   if (!PlayPhaseOver()) {
     return std::vector<double>(kNumPlayers, 0.0);
   }
-  const std::array<int, kNumPlayers> scores = CalculateScores(common_state_);
+  const std::array<int, kNumPlayers> scores =
+      CalculateScores(MakeScoringSummary(common_state_));
   std::vector<double> returns;
   returns.reserve(kNumPlayers);
   for (int p = 0; p < kNumPlayers; ++p) {

@@ -22,6 +22,7 @@
 
 #include "open_spiel/game_parameters.h"
 #include "open_spiel/games/hungarian_tarok/phases.h"
+#include "open_spiel/games/hungarian_tarok/scoring.h"
 #include "open_spiel/observer.h"
 #include "open_spiel/policy.h"
 #include "open_spiel/spiel.h"
@@ -34,7 +35,8 @@ namespace hungarian_tarok {
 namespace {
 
 namespace testing = open_spiel::testing;
-void PlayTalonSkartAndAnnulments(std::mt19937& mt, HungarianTarokState& post_bidding) {
+void PlayTalonSkartAndAnnulments(std::mt19937& mt,
+                                 HungarianTarokState& post_bidding) {
   HungarianTarokState& state = post_bidding;
   while (state.GetPhaseType() == PhaseType::kTalon) {
     auto outcomes = state.ChanceOutcomes();
@@ -317,6 +319,100 @@ void TestTuletroa(std::mt19937& mt) {
                  /*pass_until=*/kPartner, /*called_card=*/MakeTarok(19));
 }
 
+ScoringSummary MakeDefaultSummary() {
+  ScoringSummary s;
+  s.winning_bid = 3;
+  s.has_partner = true;
+  s.player_sides = {Side::kDeclarer, Side::kDeclarer, Side::kOpponents,
+                    Side::kOpponents};
+  // AnnouncementSide default-initializes to all false/0
+  s.declarer_card_points = 50;
+  s.truletroa_winner = std::nullopt;
+  s.four_kings_winner = std::nullopt;
+  s.xxi_catch_winner = std::nullopt;
+  s.double_game_winner = std::nullopt;
+  s.volat_winner = std::nullopt;
+  s.pagat_ultimo_result = PagatUltimoResult::kNotInLastTrick;
+  s.pagat_holder_side = Side::kDeclarer;
+  return s;
+}
+
+void ScoringTest() {
+  using Scores = std::array<int, kNumPlayers>;
+
+  // Announced truletroa by declarer, but opponents won it.
+  // Opponents win unannounced: -1*1. Declarer announced but lost: -1*2.
+  // Total truletroa: -3. Game win: +1. Net: -2.
+  {
+    ScoringSummary s = MakeDefaultSummary();
+    s.truletroa_winner = Side::kOpponents;
+    s.declarer_side.announced[static_cast<int>(AnnouncementType::kTuletroa)] =
+        true;
+    SPIEL_CHECK_EQ(CalculateScores(s), (Scores{-2, -2, 2, 2}));
+  }
+
+  // Two game win, no partner with four kings for opponents (unannounced).
+  // Game: 2, Four kings: -1, Net +1
+  // Solo: declarer_score*=3 = 3, opponents each get -1.
+  {
+    ScoringSummary s = MakeDefaultSummary();
+    s.winning_bid = 2;
+    s.has_partner = false;
+    s.player_sides = {Side::kDeclarer, Side::kOpponents, Side::kOpponents,
+                      Side::kOpponents};
+    s.declarer_card_points = 55;
+    s.four_kings_winner = Side::kOpponents;
+    SPIEL_CHECK_EQ(CalculateScores(s), (Scores{3, -1, -1, -1}));
+  }
+
+  // Failed pagat ultimo by declarer, unannounced.
+  // Other side gets pagat score: -5. Game win: +1. Net: -4.
+  {
+    ScoringSummary s = MakeDefaultSummary();
+    s.pagat_ultimo_result = PagatUltimoResult::kFailed;
+    s.pagat_holder_side = Side::kDeclarer;
+    SPIEL_CHECK_EQ(CalculateScores(s), (Scores{-4, -4, 4, 4}));
+  }
+
+  // Failed announced pagat ultimo by opponents + failed quiet ulti by declarer.
+  // +10 for no opponent ulti, -5 for failed declarer ulti, +5 total.
+  // Game loss: -1. Net: +4.
+  {
+    ScoringSummary s = MakeDefaultSummary();
+    s.declarer_card_points = 40;
+    s.pagat_ultimo_result = PagatUltimoResult::kFailed;
+    s.pagat_holder_side = Side::kDeclarer;
+    s.opponents_side
+        .announced[static_cast<int>(AnnouncementType::kPagatUltimo)] = true;
+    SPIEL_CHECK_EQ(CalculateScores(s), (Scores{4, 4, -4, -4}));
+  }
+
+  // Announced double game by declarer, contra'd once.
+  // Double game score: 2*4*2=16.
+  {
+    ScoringSummary s = MakeDefaultSummary();
+    s.winning_bid = 2;
+    s.declarer_card_points = 75;
+    s.double_game_winner = Side::kDeclarer;
+    s.declarer_side.announced[static_cast<int>(AnnouncementType::kDoubleGame)] =
+        true;
+    s.declarer_side
+        .contra_level[static_cast<int>(AnnouncementType::kDoubleGame)] = 1;
+    SPIEL_CHECK_EQ(CalculateScores(s), (Scores{16, 16, -16, -16}));
+  }
+
+  // Volat for opponents suppresses quiet double game.
+  // Volat base=1*3=3, opponents win: -3. Double game not scored (unannounced
+  // and volat). Net: -3.
+  {
+    ScoringSummary s = MakeDefaultSummary();
+    s.declarer_card_points = 8;
+    s.double_game_winner = Side::kOpponents;
+    s.volat_winner = Side::kOpponents;
+    SPIEL_CHECK_EQ(CalculateScores(s), (Scores{-3, -3, 3, 3}));
+  }
+}
+
 }  // namespace
 }  // namespace hungarian_tarok
 }  // namespace open_spiel
@@ -324,6 +420,7 @@ void TestTuletroa(std::mt19937& mt) {
 int main(int /*argc*/, char** /*argv*/) {
   std::mt19937 mt(42);
 
+  open_spiel::hungarian_tarok::ScoringTest();
   open_spiel::hungarian_tarok::TestBids(mt);
   open_spiel::hungarian_tarok::TestTuletroa(mt);
   open_spiel::hungarian_tarok::TrialThreeTest(mt);
