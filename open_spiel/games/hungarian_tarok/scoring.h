@@ -29,6 +29,22 @@ struct ScoringSummary {
   std::optional<Side> volat_winner;
   PagatUltimoResult pagat_ultimo_result;
   Side pagat_holder_side;
+
+  constexpr bool declarer_announced(AnnouncementType type) const {
+    return declarer_side.announced[static_cast<int>(type)];
+  }
+  constexpr bool opponents_announced(AnnouncementType type) const {
+    return opponents_side.announced[static_cast<int>(type)];
+  }
+  constexpr bool side_announced(Side side, AnnouncementType type) const {
+    return side == Side::kDeclarer ? declarer_announced(type)
+                                   : opponents_announced(type);
+  }
+
+  constexpr bool game_contrad() const {
+    return declarer_side
+               .contra_level[static_cast<int>(AnnouncementType::kGame)] > 0;
+  }
 };
 
 inline Side CardWinnerSide(const CommonState& game_data, Card card) {
@@ -157,25 +173,28 @@ inline std::array<int, kNumPlayers> CalculateScores(
   const int kTuletroaScore = 1;
   const int kFourKingsScore = 1;
   const int kPagatUltimoScore = 5;
-  const int kXxiCatchScore = 21;
+  const int kXXICatchScore = 21;
 
   const int kDoubleGameMultiplier = 2;
   const int kVolatMultiplier = 3;
 
   int declarer_score = 0;
 
+  auto either_side_announced = [&](AnnouncementType type) {
+    return summary.declarer_announced(type) ||
+           summary.opponents_announced(type);
+  };
+
   auto score_multiplier = [&](Side side, AnnouncementType type) {
     const CommonState::AnnouncementSide& announcement_side =
         side == Side::kDeclarer ? summary.declarer_side
                                 : summary.opponents_side;
 
-    int multiplier = 1;
-    if (announcement_side.announced[static_cast<int>(type)]) {
-      multiplier = 2;
-    } else {
+    if (!summary.side_announced(side, type)) {
       return 1;
     }
 
+    int multiplier = 2;
     int contra_level = announcement_side.contra_level[static_cast<int>(type)];
     for (int i = 0; i < contra_level; ++i) {
       multiplier *= 2;
@@ -185,17 +204,17 @@ inline std::array<int, kNumPlayers> CalculateScores(
 
   auto add_scores = [&](std::optional<Side> winner, int base_score,
                         AnnouncementType type) {
-    bool declarer_announced =
-        summary.declarer_side.announced[static_cast<int>(type)];
-    bool opponents_announced =
-        summary.opponents_side.announced[static_cast<int>(type)];
+    bool declarer_announced = summary.declarer_announced(type);
+    bool opponents_announced = summary.opponents_announced(type);
 
+    // + points for the winner
     if (winner == Side::kDeclarer) {
       declarer_score += base_score * score_multiplier(Side::kDeclarer, type);
     } else if (winner == Side::kOpponents) {
       declarer_score -= base_score * score_multiplier(Side::kOpponents, type);
     }
 
+    // - points for the loser if they announced
     if (declarer_announced && winner != Side::kDeclarer) {
       declarer_score -= base_score * score_multiplier(Side::kDeclarer, type);
     }
@@ -204,21 +223,25 @@ inline std::array<int, kNumPlayers> CalculateScores(
     }
   };
 
-  add_scores(summary.truletroa_winner, kTuletroaScore,
-             AnnouncementType::kTuletroa);
+  bool tuletroa_announced = either_side_announced(AnnouncementType::kTuletroa);
+  bool four_kings_announced =
+      either_side_announced(AnnouncementType::kFourKings);
 
-  add_scores(summary.four_kings_winner, kFourKingsScore,
-             AnnouncementType::kFourKings);
+  // no quiet four kings or tuletroa if volat
+  if (!summary.volat_winner.has_value() || tuletroa_announced) {
+    add_scores(summary.truletroa_winner, kTuletroaScore,
+               AnnouncementType::kTuletroa);
+  }
+  if (!summary.volat_winner.has_value() || four_kings_announced) {
+    add_scores(summary.four_kings_winner, kFourKingsScore,
+               AnnouncementType::kFourKings);
+  }
 
-  add_scores(summary.xxi_catch_winner, kXxiCatchScore,
+  add_scores(summary.xxi_catch_winner, kXXICatchScore,
              AnnouncementType::kXXICapture);
 
-  const bool pagatulti_announced =
-      summary.pagat_holder_side == Side::kDeclarer
-          ? summary.declarer_side
-                .announced[static_cast<int>(AnnouncementType::kPagatUltimo)]
-          : summary.opponents_side
-                .announced[static_cast<int>(AnnouncementType::kPagatUltimo)];
+  const bool pagatulti_announced = summary.side_announced(
+      summary.pagat_holder_side, AnnouncementType::kPagatUltimo);
 
   if (summary.pagat_ultimo_result == PagatUltimoResult::kFailed &&
       !pagatulti_announced) {
@@ -238,27 +261,66 @@ inline std::array<int, kNumPlayers> CalculateScores(
     add_scores(std::nullopt, kPagatUltimoScore, AnnouncementType::kPagatUltimo);
   }
 
-  const CommonState::AnnouncementSide& double_side =
-      summary.double_game_winner == Side::kDeclarer ? summary.declarer_side
-                                                    : summary.opponents_side;
-  add_scores(summary.volat_winner, kGameBaseScore * kVolatMultiplier,
-             AnnouncementType::kVolat);
-  // Don't score unannounced double games if volat.
-  if (!summary.volat_winner.has_value() ||
-      double_side.announced[static_cast<int>(AnnouncementType::kDoubleGame)]) {
-    add_scores(summary.double_game_winner,
-               kGameBaseScore * kDoubleGameMultiplier,
-               AnnouncementType::kDoubleGame);
+  Side winner;
+  Side loser;
+  if (summary.declarer_card_points > 47) {
+    winner = Side::kDeclarer;
+    loser = Side::kOpponents;
+  } else {
+    winner = Side::kOpponents;
+    loser = Side::kDeclarer;
   }
 
-  if (!summary.double_game_winner.has_value() &&
-      !summary.volat_winner.has_value()) {
-    // normal game scoring
-    if (summary.declarer_card_points > 47) {
-      declarer_score += kGameBaseScore;
-    } else {
-      declarer_score -= kGameBaseScore;
+  add_scores(summary.volat_winner, kGameBaseScore * kVolatMultiplier,
+             AnnouncementType::kVolat);
+
+  // quiet double game is not always scored
+  for (Side side : {Side::kDeclarer, Side::kOpponents}) {
+    int score = kGameBaseScore * kDoubleGameMultiplier *
+                score_multiplier(side, AnnouncementType::kDoubleGame) *
+                (side == Side::kDeclarer ? 1 : -1);
+    bool announced =
+        summary.side_announced(side, AnnouncementType::kDoubleGame);
+    bool made = summary.double_game_winner == side;
+
+    if (announced && made) {
+      declarer_score += score;
+    } else if (announced && !made) {
+      declarer_score -= score;
+    } else if (!announced && made) {
+      if (!summary.volat_winner.has_value() &&
+          !summary.side_announced(side, AnnouncementType::kVolat)) {
+        declarer_score += score;
+      }
     }
+  }
+
+  // dont use add_scores because it would apply it twice
+  // (once because one side announced it and did not make it, once because the
+  // other team made it)
+  auto add_game_score = [&]() {
+    int score =
+        kGameBaseScore *
+        (1 << summary.declarer_side
+                  .contra_level[static_cast<int>(AnnouncementType::kGame)]);
+    if (winner == Side::kDeclarer) {
+      declarer_score += score;
+    } else if (winner == Side::kOpponents) {
+      declarer_score -= score;
+    }
+  };
+
+  bool double_volat = summary.volat_winner.has_value() ||
+                      summary.double_game_winner.has_value();
+  bool double_or_volat_announced =
+      summary.side_announced(winner, AnnouncementType::kDoubleGame) ||
+      summary.side_announced(winner, AnnouncementType::kVolat);
+  // contra games are always counted
+  if (summary.game_contrad()) {
+    add_game_score();
+  } else if (!double_volat && !double_or_volat_announced) {
+    // otherwise dont count if volat or double game were announced or made
+    add_game_score();
   }
 
   // declarer played alone, everyone pays/gets paid by them

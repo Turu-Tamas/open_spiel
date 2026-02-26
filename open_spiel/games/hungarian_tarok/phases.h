@@ -75,7 +75,6 @@ constexpr Action kAnnulKings = 2;
 
 constexpr int kMaxContraLevel = 5;
 
-const int kNumAnnouncementTypes = 8;
 const int kPlayerHandSize = 9;
 constexpr int kTalonSize = 6;
 constexpr int kNumRounds = 9;
@@ -94,7 +93,15 @@ enum class AnnouncementType {
   kXXICapture = 5,
   kEightTaroks = 6,
   kNineTaroks = 7,
+  kGame = 8,
+
+  kNumAnnouncementTypes = 9,
 };
+const int kNumAnnouncementTypes =
+    static_cast<int>(AnnouncementType::kNumAnnouncementTypes);
+
+std::ostream& operator<<(std::ostream& os,
+                         const AnnouncementType& announcement);
 
 enum class PhaseType {
   kSetup,
@@ -131,6 +138,8 @@ struct AnnouncementAction {
   }
 
   static constexpr Action AnnounceAction(AnnouncementType type) {
+    SPIEL_CHECK_NE(type,
+                   AnnouncementType::kGame);  // game is announced implicitly
     return AnnouncementAction{type, Level::kAnnounce}.ToAction();
   }
   static constexpr Action ContraAction(AnnouncementType type) {

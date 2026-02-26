@@ -40,6 +40,42 @@ std::ostream& operator<<(std::ostream& os, const PhaseType& phase) {
   return os;
 }
 
+std::ostream& operator<<(std::ostream& os,
+                         const AnnouncementType& announcement) {
+  switch (announcement) {
+    case AnnouncementType::kTuletroa:
+      os << "Tuletroa";
+      break;
+    case AnnouncementType::kFourKings:
+      os << "Four Kings";
+      break;
+    case AnnouncementType::kXXICapture:
+      os << "XXI Capture";
+      break;
+    case AnnouncementType::kDoubleGame:
+      os << "Double Game";
+      break;
+    case AnnouncementType::kVolat:
+      os << "Volat";
+      break;
+    case AnnouncementType::kPagatUltimo:
+      os << "Pagat Ultimo";
+      break;
+    case AnnouncementType::kEightTaroks:
+      os << "Eight Taroks";
+      break;
+    case AnnouncementType::kNineTaroks:
+      os << "Nine Taroks";
+      break;
+    case AnnouncementType::kGame:
+      os << "Game";
+      break;
+    default:
+      SpielFatalError("Unknown announcement type");
+  }
+  return os;
+}
+
 // Generic phase dispatch.
 Player HungarianTarokState::PhaseCurrentPlayer() const {
   switch (current_phase_) {
@@ -824,6 +860,9 @@ void HungarianTarokState::StartAnnouncementsPhase() {
       }
     }
   }
+
+  common_state_.declarer_side_
+      .announced[static_cast<int>(AnnouncementType::kGame)] = true;
 }
 
 Player HungarianTarokState::AnnouncementsCurrentPlayer() const {
@@ -936,6 +975,7 @@ void HungarianTarokState::AddAnnounceActions(
     std::vector<Action>& actions) const {
   for (int i = 0; i < kNumAnnouncementTypes; ++i) {
     const AnnouncementType type = static_cast<AnnouncementType>(i);
+    if (type == AnnouncementType::kGame) continue;  // game is implicit
     if (CanAnnounceType(type)) {
       actions.push_back(AnnouncementAction::AnnounceAction(type));
     }
