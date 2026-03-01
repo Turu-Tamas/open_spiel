@@ -861,8 +861,7 @@ void HungarianTarokState::StartAnnouncementsPhase() {
     }
   }
 
-  common_state_.declarer_side_
-      .announced[static_cast<int>(AnnouncementType::kGame)] = true;
+  common_state_.declarer_side_.announced_for(AnnouncementType::kGame) = true;
 }
 
 Player HungarianTarokState::AnnouncementsCurrentPlayer() const {
@@ -902,12 +901,10 @@ HungarianTarokState::OtherAnnouncementSide() const {
 }
 
 bool HungarianTarokState::CanAnnounceTuletroa() const {
-  if (CurrentAnnouncementSide()
-          .announced[static_cast<int>(AnnouncementType::kTuletroa)]) {
+  if (CurrentAnnouncementSide().announced_for(AnnouncementType::kTuletroa)) {
     return false;
   }
-  if (CurrentAnnouncementSide()
-          .announced[static_cast<int>(AnnouncementType::kVolat)]) {
+  if (CurrentAnnouncementSide().announced_for(AnnouncementType::kVolat)) {
     return false;
   }
 
@@ -923,8 +920,7 @@ bool HungarianTarokState::CanAnnounceTuletroa() const {
   // as cue bidder, if declarer did not announce tuletroa, you may do so if you
   // have two honours
   if (announcements_.current_player_ == common_state_.cue_bidder_ &&
-      !CurrentAnnouncementSide()
-           .announced[static_cast<int>(AnnouncementType::kTuletroa)]) {
+      !CurrentAnnouncementSide().announced_for(AnnouncementType::kTuletroa)) {
     const std::vector<Card> honours{kPagat, kSkiz, kXXI};
     return absl::c_count_if(honours, [&](Card card) {
              return PlayerHoldsCard(announcements_.current_player_, card);
@@ -965,7 +961,7 @@ bool HungarianTarokState::CanAnnounceType(AnnouncementType type) const {
   }
 
   if (IsBlockedByVolat(type)) {
-    return !current_side.announced[static_cast<int>(AnnouncementType::kVolat)];
+    return !current_side.announced_for(AnnouncementType::kVolat);
   }
 
   return true;
@@ -987,8 +983,9 @@ void HungarianTarokState::AddContraActions(std::vector<Action>& actions) const {
   for (int i = 0; i < kNumAnnouncementTypes; ++i) {
     const AnnouncementType type = static_cast<AnnouncementType>(i);
     if (!IsContraAllowedFor(type)) continue;
-    if (other_side.announced[i] && other_side.contra_level[i] % 2 == 0 &&
-        other_side.contra_level[i] <= kMaxContraLevel) {
+    if (other_side.announced_for(type) &&
+        other_side.contra_level_for(type) % 2 == 0 &&
+        other_side.contra_level_for(type) <= kMaxContraLevel) {
       actions.push_back(AnnouncementAction::ContraAction(type));
     }
   }
@@ -999,8 +996,8 @@ void HungarianTarokState::AddReContraActions(
   const CommonState::AnnouncementSide& current_side = CurrentAnnouncementSide();
   for (int i = 0; i < kNumAnnouncementTypes; ++i) {
     const AnnouncementType type = static_cast<AnnouncementType>(i);
-    if (current_side.contra_level[i] % 2 == 1 &&
-        current_side.contra_level[i] <= kMaxContraLevel) {
+    if (current_side.contra_level_for(type) % 2 == 1 &&
+        current_side.contra_level_for(type) <= kMaxContraLevel) {
       actions.push_back(AnnouncementAction::ReContraAction(type));
     }
   }
@@ -1091,8 +1088,8 @@ void HungarianTarokState::AnnouncementsDoApplyAction(Action action) {
     }
     if (common_state_.mandatory_pagatulti_ &&
         announcements_.current_player_ == common_state_.partner_ &&
-        !CurrentAnnouncementSide()
-             .announced[static_cast<int>(AnnouncementType::kPagatUltimo)]) {
+        !CurrentAnnouncementSide().announced_for(
+            AnnouncementType::kPagatUltimo)) {
       announcements_.mandatory_announcements_.push_back(
           AnnouncementType::kPagatUltimo);
     }
@@ -1102,16 +1099,15 @@ void HungarianTarokState::AnnouncementsDoApplyAction(Action action) {
   AnnouncementAction ann_action = AnnouncementAction::FromAction(action);
   CommonState::AnnouncementSide& current_side = CurrentAnnouncementSide();
   CommonState::AnnouncementSide& other_side = OtherAnnouncementSide();
-  int type_index = static_cast<int>(ann_action.type);
   switch (ann_action.level) {
     case AnnouncementAction::Level::kAnnounce:
-      current_side.announced[type_index] = true;
+      current_side.announced_for(ann_action.type) = true;
       break;
     case AnnouncementAction::Level::kContra:
-      other_side.contra_level[type_index]++;
+      other_side.contra_level_for(ann_action.type)++;
       break;
     case AnnouncementAction::Level::kReContra:
-      current_side.contra_level[type_index]++;
+      current_side.contra_level_for(ann_action.type)++;
       break;
   }
   announcements_.last_to_speak_ = announcements_.current_player_;
@@ -1125,8 +1121,8 @@ void HungarianTarokState::AnnouncementsDoApplyAction(Action action) {
   if (ann_action.type == AnnouncementType::kPagatUltimo &&
       ann_action.level == AnnouncementAction::Level::kAnnounce) {
     if (announcements_.tarok_counts_[announcements_.current_player_] == 8 &&
-        !CurrentAnnouncementSide()
-             .announced[static_cast<int>(AnnouncementType::kEightTaroks)]) {
+        !CurrentAnnouncementSide().announced_for(
+            AnnouncementType::kEightTaroks)) {
       announcements_.mandatory_announcements_.push_back(
           AnnouncementType::kEightTaroks);
     } else if (announcements_.tarok_counts_[announcements_.current_player_] ==

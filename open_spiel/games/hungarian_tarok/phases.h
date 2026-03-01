@@ -173,6 +173,19 @@ struct CommonState {
   struct AnnouncementSide {
     std::array<bool, kNumAnnouncementTypes> announced = {};
     std::array<int, kNumAnnouncementTypes> contra_level = {};
+
+    constexpr bool& announced_for(AnnouncementType type) {
+      return announced[static_cast<int>(type)];
+    }
+    constexpr bool announced_for(AnnouncementType type) const {
+      return announced[static_cast<int>(type)];
+    }
+    constexpr int& contra_level_for(AnnouncementType type) {
+      return contra_level[static_cast<int>(type)];
+    }
+    constexpr int contra_level_for(AnnouncementType type) const {
+      return contra_level[static_cast<int>(type)];
+    }
   };
   AnnouncementSide declarer_side_;
   AnnouncementSide opponents_side_;

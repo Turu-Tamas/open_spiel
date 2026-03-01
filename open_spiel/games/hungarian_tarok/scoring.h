@@ -31,10 +31,10 @@ struct ScoringSummary {
   Side pagat_holder_side;
 
   constexpr bool declarer_announced(AnnouncementType type) const {
-    return declarer_side.announced[static_cast<int>(type)];
+    return declarer_side.announced_for(type);
   }
   constexpr bool opponents_announced(AnnouncementType type) const {
-    return opponents_side.announced[static_cast<int>(type)];
+    return opponents_side.announced_for(type);
   }
   constexpr bool side_announced(Side side, AnnouncementType type) const {
     return side == Side::kDeclarer ? declarer_announced(type)
@@ -42,8 +42,7 @@ struct ScoringSummary {
   }
 
   constexpr bool game_contrad() const {
-    return declarer_side
-               .contra_level[static_cast<int>(AnnouncementType::kGame)] > 0;
+    return declarer_side.contra_level_for(AnnouncementType::kGame) > 0;
   }
 };
 
@@ -195,7 +194,7 @@ inline std::array<int, kNumPlayers> CalculateScores(
     }
 
     int multiplier = 2;
-    int contra_level = announcement_side.contra_level[static_cast<int>(type)];
+    int contra_level = announcement_side.contra_level_for(type);
     for (int i = 0; i < contra_level; ++i) {
       multiplier *= 2;
     }
@@ -301,8 +300,7 @@ inline std::array<int, kNumPlayers> CalculateScores(
   auto add_game_score = [&]() {
     int score =
         kGameBaseScore *
-        (1 << summary.declarer_side
-                  .contra_level[static_cast<int>(AnnouncementType::kGame)]);
+        (1 << summary.declarer_side.contra_level_for(AnnouncementType::kGame));
     if (winner == Side::kDeclarer) {
       declarer_score += score;
     } else if (winner == Side::kOpponents) {

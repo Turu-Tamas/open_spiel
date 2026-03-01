@@ -35,6 +35,8 @@ namespace hungarian_tarok {
 namespace {
 
 namespace testing = open_spiel::testing;
+using Scores = std::array<int, kNumPlayers>;
+
 void PlayTalonSkartAndAnnulments(std::mt19937& mt,
                                  HungarianTarokState& post_bidding) {
   HungarianTarokState& state = post_bidding;
@@ -337,17 +339,41 @@ ScoringSummary MakeDefaultSummary() {
   return s;
 }
 
-void ScoringTest() {
-  using Scores = std::array<int, kNumPlayers>;
+void TestGameScores(const ScoringSummary& base_summary,
+                    const std::vector<int>& expected_declarer_scores) {
+  std::vector<int> trick_points = {0, 23, 24, 48, 71, 94};
+  SPIEL_CHECK_EQ(expected_declarer_scores.size(), trick_points.size());
 
+  for (int i = 0; i < static_cast<int>(expected_declarer_scores.size()); ++i) {
+    ScoringSummary s = base_summary;
+    s.declarer_card_points = trick_points[i];
+
+    if (trick_points[i] == 0) {
+      s.volat_winner = Side::kOpponents;
+    } else if (trick_points[i] == 94) {
+      s.volat_winner = Side::kDeclarer;
+    }
+
+    if (trick_points[i] < 24) {
+      s.double_game_winner = Side::kOpponents;
+    } else if (trick_points[i] > 70) {
+      s.double_game_winner = Side::kDeclarer;
+    }
+
+    int decl_score = expected_declarer_scores[i];
+    Scores expected_scores = {decl_score, decl_score, -decl_score, -decl_score};
+    SPIEL_CHECK_EQ(CalculateScores(s), expected_scores);
+  }
+}
+
+void ScoringTest() {
   // Announced truletroa by declarer, but opponents won it.
   // Opponents win unannounced: -1*1. Declarer announced but lost: -1*2.
   // Total truletroa: -3. Game win: +1. Net: -2.
   {
     ScoringSummary s = MakeDefaultSummary();
     s.truletroa_winner = Side::kOpponents;
-    s.declarer_side.announced[static_cast<int>(AnnouncementType::kTuletroa)] =
-        true;
+    s.declarer_side.announced_for(AnnouncementType::kTuletroa) = true;
     SPIEL_CHECK_EQ(CalculateScores(s), (Scores{-2, -2, 2, 2}));
   }
 
@@ -382,8 +408,7 @@ void ScoringTest() {
     s.declarer_card_points = 40;
     s.pagat_ultimo_result = PagatUltimoResult::kFailed;
     s.pagat_holder_side = Side::kDeclarer;
-    s.opponents_side
-        .announced[static_cast<int>(AnnouncementType::kPagatUltimo)] = true;
+    s.opponents_side.announced_for(AnnouncementType::kPagatUltimo) = true;
     SPIEL_CHECK_EQ(CalculateScores(s), (Scores{4, 4, -4, -4}));
   }
 
@@ -394,10 +419,8 @@ void ScoringTest() {
     s.winning_bid = 2;
     s.declarer_card_points = 75;
     s.double_game_winner = Side::kDeclarer;
-    s.declarer_side.announced[static_cast<int>(AnnouncementType::kDoubleGame)] =
-        true;
-    s.declarer_side
-        .contra_level[static_cast<int>(AnnouncementType::kDoubleGame)] = 1;
+    s.declarer_side.announced_for(AnnouncementType::kDoubleGame) = true;
+    s.declarer_side.contra_level_for(AnnouncementType::kDoubleGame) = 1;
     SPIEL_CHECK_EQ(CalculateScores(s), (Scores{16, 16, -16, -16}));
   }
 
@@ -422,153 +445,114 @@ void ScoringTest() {
     SPIEL_CHECK_EQ(CalculateScores(s), (Scores{3, 3, -3, -3}));
   }
 
-  auto test_game_scores =
-      [&](const ScoringSummary summary,
-          const std::vector<int>& expected_declarer_scores) {
-        std::vector<int> trick_points = {0, 23, 24, 48, 71, 94};
-        SPIEL_CHECK_EQ(expected_declarer_scores.size(), trick_points.size());
-
-        for (int i = 0; i < expected_declarer_scores.size(); ++i) {
-          ScoringSummary s = summary;
-          s.declarer_card_points = trick_points[i];
-
-          if (trick_points[i] == 0) {
-            s.volat_winner = Side::kOpponents;
-          } else if (trick_points[i] == 94) {
-            s.volat_winner = Side::kDeclarer;
-          }
-
-          if (trick_points[i] < 24) {
-            s.double_game_winner = Side::kOpponents;
-          } else if (trick_points[i] > 70) {
-            s.double_game_winner = Side::kDeclarer;
-          }
-
-          int decl_score = expected_declarer_scores[i];
-          Scores expected_scores = {decl_score, decl_score, -decl_score,
-                                    -decl_score};
-          Scores real_scores = CalculateScores(s);
-          SPIEL_CHECK_EQ(real_scores, expected_scores);
-        }
-      };
-
   // The examples for scoring game, double game and volat from
   // https://www.pagat.com/tarot/xx-hivas.html
   {
     ScoringSummary s = MakeDefaultSummary();
-    test_game_scores(s, {
-                            -3,  // opponent volat
-                            -2,  // opponent double
-                            -1,  // opponent game
-                            1,   // declarer game
-                            2,   // declarer double
-                            3,   // declarer volat
-                        });
+    TestGameScores(s, {
+                          -3,  // opponent volat
+                          -2,  // opponent double
+                          -1,  // opponent game
+                          1,   // declarer game
+                          2,   // declarer double
+                          3,   // declarer volat
+                      });
   }
 
   {
     ScoringSummary s = MakeDefaultSummary();
-    s.declarer_side.announced[static_cast<int>(AnnouncementType::kDoubleGame)] =
-        true;
-    test_game_scores(s, {
-                            -7,  // opponent volat
-                            -6,  // opponent double
-                            -5,  // opponent game
-                            -4,  // declarer game
-                            4,   // declarer double
-                            7,   // declarer volat
-                        });
+    s.declarer_side.announced_for(AnnouncementType::kDoubleGame) = true;
+    TestGameScores(s, {
+                          -7,  // opponent volat
+                          -6,  // opponent double
+                          -5,  // opponent game
+                          -4,  // declarer game
+                          4,   // declarer double
+                          7,   // declarer volat
+                      });
   }
 
   {
     ScoringSummary s = MakeDefaultSummary();
-    s.declarer_side.announced[static_cast<int>(AnnouncementType::kVolat)] =
-        true;
-    test_game_scores(s, {
-                            -9,  // opponent volat
-                            -8,  // opponent double
-                            -7,  // opponent game
-                            -6,  // declarer game
-                            -6,  // declarer double
-                            6,   // declarer volat
-                        });
+    s.declarer_side.announced_for(AnnouncementType::kVolat) = true;
+    TestGameScores(s, {
+                          -9,  // opponent volat
+                          -8,  // opponent double
+                          -7,  // opponent game
+                          -6,  // declarer game
+                          -6,  // declarer double
+                          6,   // declarer volat
+                      });
   }
 
   {
     ScoringSummary s = MakeDefaultSummary();
-    s.declarer_side.announced[static_cast<int>(AnnouncementType::kVolat)] =
-        true;
-    s.declarer_side.announced[static_cast<int>(AnnouncementType::kDoubleGame)] =
-        true;
-    test_game_scores(s, {
-                            -13,  // opponent volat
-                            -12,  // opponent double
-                            -11,  // opponent game
-                            -10,  // declarer game
-                            -2,   // declarer double
-                            10,   // declarer volat
-                        });
+    s.declarer_side.announced_for(AnnouncementType::kVolat) = true;
+    s.declarer_side.announced_for(AnnouncementType::kDoubleGame) = true;
+    TestGameScores(s, {
+                          -13,  // opponent volat
+                          -12,  // opponent double
+                          -11,  // opponent game
+                          -10,  // declarer game
+                          -2,   // declarer double
+                          10,   // declarer volat
+                      });
   }
 
   {
     ScoringSummary s = MakeDefaultSummary();
-    s.declarer_side.contra_level[static_cast<int>(AnnouncementType::kGame)] = 1;
-    test_game_scores(s, {
-                            -5,  // opponent volat
-                            -4,  // opponent double
-                            -2,  // opponent game
-                            2,   // declarer game
-                            4,   // declarer double
-                            5,   // declarer volat
-                        });
+    s.declarer_side.contra_level_for(AnnouncementType::kGame) = 1;
+    TestGameScores(s, {
+                          -5,  // opponent volat
+                          -4,  // opponent double
+                          -2,  // opponent game
+                          2,   // declarer game
+                          4,   // declarer double
+                          5,   // declarer volat
+                      });
   }
 
   {
     ScoringSummary s = MakeDefaultSummary();
-    s.declarer_side.contra_level[static_cast<int>(AnnouncementType::kGame)] = 1;
-    s.opponents_side
-        .announced[static_cast<int>(AnnouncementType::kDoubleGame)] = true;
-    test_game_scores(s, {
-                            -9,  // opponent volat
-                            -6,  // opponent double
-                            2,   // opponent game
-                            6,   // declarer game
-                            8,   // declarer double
-                            9,   // declarer volat
-                        });
+    s.declarer_side.contra_level_for(AnnouncementType::kGame) = 1;
+    s.opponents_side.announced_for(AnnouncementType::kDoubleGame) = true;
+    TestGameScores(s, {
+                          -9,  // opponent volat
+                          -6,  // opponent double
+                          2,   // opponent game
+                          6,   // declarer game
+                          8,   // declarer double
+                          9,   // declarer volat
+                      });
   }
 
   {
     ScoringSummary s = MakeDefaultSummary();
-    s.declarer_side
-        .contra_level[static_cast<int>(AnnouncementType::kDoubleGame)] = 1;
-    s.declarer_side.announced[static_cast<int>(AnnouncementType::kDoubleGame)] =
-        true;
-    test_game_scores(s, {
-                            -11,  // opponent volat
-                            -10,  // opponent double
-                            -9,   // opponent game
-                            -8,   // declarer game
-                            8,    // declarer double
-                            11,   // declarer volat
-                        });
+    s.declarer_side.contra_level_for(AnnouncementType::kDoubleGame) = 1;
+    s.declarer_side.announced_for(AnnouncementType::kDoubleGame) = true;
+    TestGameScores(s, {
+                          -11,  // opponent volat
+                          -10,  // opponent double
+                          -9,   // opponent game
+                          -8,   // declarer game
+                          8,    // declarer double
+                          11,   // declarer volat
+                      });
   }
 
   {
     ScoringSummary s = MakeDefaultSummary();
-    s.declarer_side.announced[static_cast<int>(AnnouncementType::kDoubleGame)] =
-        true;
-    s.declarer_side
-        .contra_level[static_cast<int>(AnnouncementType::kDoubleGame)] = 1;
-    s.declarer_side.contra_level[static_cast<int>(AnnouncementType::kGame)] = 1;
-    test_game_scores(s, {
-                            -13,  // opponent volat
-                            -12,  // opponent double
-                            -10,  // opponent game
-                            -6,   // declarer game
-                            10,   // declarer double
-                            13,   // declarer volat
-                        });
+    s.declarer_side.announced_for(AnnouncementType::kDoubleGame) = true;
+    s.declarer_side.contra_level_for(AnnouncementType::kDoubleGame) = 1;
+    s.declarer_side.contra_level_for(AnnouncementType::kGame) = 1;
+    TestGameScores(s, {
+                          -13,  // opponent volat
+                          -12,  // opponent double
+                          -10,  // opponent game
+                          -6,   // declarer game
+                          10,   // declarer double
+                          13,   // declarer volat
+                      });
   }
 }
 
