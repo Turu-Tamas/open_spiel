@@ -291,6 +291,10 @@ void HungarianTarokState::SetupDoApplyAction(Action action) {
 
   if (setup_.current_card_ == kPagat) {
     common_state_.pagat_holder_ = action;
+  } else if (setup_.current_card_ == kXXI) {
+    common_state_.XXI_holder_ = action;
+  } else if (setup_.current_card_ == kSkiz) {
+    common_state_.skiz_holder_ = action;
   }
 
   // Action is the player ID who receives the next card.
@@ -918,7 +922,7 @@ bool HungarianTarokState::CanAnnounceTuletroa() const {
            PlayerHoldsCard(common_state_.declarer_, kSkiz);
   }
   // as cue bidder, if declarer did not announce tuletroa, you may do so if you
-  // have two honours
+  // have two honours (you know the declarer holds the third)
   if (announcements_.current_player_ == common_state_.cue_bidder_ &&
       !CurrentAnnouncementSide().announced_for(AnnouncementType::kTuletroa)) {
     const std::vector<Card> honours{kPagat, kSkiz, kXXI};
@@ -1071,6 +1075,7 @@ void HungarianTarokState::AnnouncementsDoApplyAction(Action action) {
   SPIEL_CHECK_FALSE(AnnouncementsPhaseOver());
   std::vector<Action> legal_actions = AnnouncementsLegalActions();
   SPIEL_CHECK_TRUE(absl::c_find(legal_actions, action) != legal_actions.end());
+  Player& current_player = announcements_.current_player_;
 
   if (!announcements_.partner_called_) {
     AnnouncementsCallPartner(action);
@@ -1078,16 +1083,15 @@ void HungarianTarokState::AnnouncementsDoApplyAction(Action action) {
   }
 
   if (action == AnnouncementAction::PassAction()) {
-    announcements_.current_player_ =
-        (announcements_.current_player_ + 1) % kNumPlayers;
-    if (announcements_.current_player_ == announcements_.last_to_speak_) {
-      announcements_.current_player_ = kTerminalPlayerId;
+    current_player = (current_player + 1) % kNumPlayers;
+    if (current_player == announcements_.last_to_speak_) {
+      current_player = kTerminalPlayerId;
     }
-    if (announcements_.current_player_ == common_state_.declarer_) {
+    if (current_player == common_state_.declarer_) {
       announcements_.first_round_ = false;
     }
     if (common_state_.mandatory_pagatulti_ &&
-        announcements_.current_player_ == common_state_.partner_ &&
+        current_player == common_state_.partner_ &&
         !CurrentAnnouncementSide().announced_for(
             AnnouncementType::kPagatUltimo)) {
       announcements_.mandatory_announcements_.push_back(
@@ -1110,7 +1114,7 @@ void HungarianTarokState::AnnouncementsDoApplyAction(Action action) {
       current_side.contra_level_for(ann_action.type)++;
       break;
   }
-  announcements_.last_to_speak_ = announcements_.current_player_;
+  announcements_.last_to_speak_ = current_player;
 
   auto it =
       absl::c_find(announcements_.mandatory_announcements_, ann_action.type);
@@ -1120,13 +1124,12 @@ void HungarianTarokState::AnnouncementsDoApplyAction(Action action) {
 
   if (ann_action.type == AnnouncementType::kPagatUltimo &&
       ann_action.level == AnnouncementAction::Level::kAnnounce) {
-    if (announcements_.tarok_counts_[announcements_.current_player_] == 8 &&
+    if (announcements_.tarok_counts_[current_player] == 8 &&
         !CurrentAnnouncementSide().announced_for(
             AnnouncementType::kEightTaroks)) {
       announcements_.mandatory_announcements_.push_back(
           AnnouncementType::kEightTaroks);
-    } else if (announcements_.tarok_counts_[announcements_.current_player_] ==
-                   9 &&
+    } else if (announcements_.tarok_counts_[current_player] == 9 &&
                !CurrentAnnouncementSide().announced[static_cast<int>(
                    AnnouncementType::kNineTaroks)]) {
       announcements_.mandatory_announcements_.push_back(

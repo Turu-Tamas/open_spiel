@@ -157,6 +157,8 @@ struct AnnouncementAction {
 struct CommonState {
   Deck deck_;
   Player pagat_holder_;
+  Player XXI_holder_;
+  Player skiz_holder_;
 
   // bidding results
   Player declarer_;

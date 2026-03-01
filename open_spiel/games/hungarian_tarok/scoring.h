@@ -141,8 +141,10 @@ inline std::optional<Side> XXICatchWinnerSide(const CommonState& game_data) {
       break;
     }
   }
-  if (same_trick && game_data.deck_[kXXI] == game_data.deck_[kSkiz]) {
-    return CardWinnerSide(game_data, kXXI);
+  bool different_sides = game_data.player_sides_[game_data.XXI_holder_] !=
+                        game_data.player_sides_[game_data.skiz_holder_];
+  if (same_trick && different_sides) {
+    return game_data.player_sides_[game_data.skiz_holder_];
   }
   return std::nullopt;
 }
