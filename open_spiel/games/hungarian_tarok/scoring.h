@@ -107,9 +107,8 @@ inline std::optional<Side> DoubleGameWinnerSide(int declarer_card_points) {
 inline PagatUltimoResult PagatUltimoWinnerSide(const CommonState& game_data) {
   bool pagat_in_last_trick = absl::c_find(game_data.tricks_.back(), kPagat) !=
                              game_data.tricks_.back().end();
-  Player trick_winner = game_data.trick_winners_.back();
   bool pagat_won =
-      game_data.deck_[kPagat] == PlayerWonCardsLocation(trick_winner);
+      game_data.deck_[kPagat] == PlayerWonCardsLocation(game_data.pagat_holder_);
 
   if (!pagat_in_last_trick) {
     return PagatUltimoResult::kNotInLastTrick;
