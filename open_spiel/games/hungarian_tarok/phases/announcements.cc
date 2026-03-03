@@ -195,14 +195,63 @@ void HungarianTarokState::AddReContraActions(
   }
 }
 
+Card HungarianTarokState::HighestMissingTarok() const {
+  for (int rank = 20; rank >= 1; --rank) {
+    Card card = MakeTarok(rank);
+    if (!PlayerHoldsCard(announcements_.current_player_, card)) {
+      return card;
+    }
+  }
+  SpielFatalError("Player holds all taroks?!");
+}
+
+std::vector<Card> HungarianTarokState::CallableCards() const {
+  SPIEL_CHECK_FALSE(announcements_.partner_called_);
+  SPIEL_CHECK_EQ(announcements_.current_player_, common_state_.declarer_);
+
+  if (common_state_.mandatory_called_card_.has_value()) {
+    return {common_state_.mandatory_called_card_.value()};
+  }
+  
+  bool tarok_discarded = false;
+  for (int rank = 1; rank <= 20; ++rank) {
+    CardLocation location = common_state_.deck_[MakeTarok(rank)];
+    if (location == CardLocation::kOpponentsSkart) {
+      tarok_discarded = true;
+      break;
+    }
+  }
+
+  if (!tarok_discarded) {
+    Card highest_missing = HighestMissingTarok();
+    if (highest_missing == kXX) {
+      return {kXX};
+    }
+    return {highest_missing, kXX};
+  }
+
+  // other taroks can be called if a tarok was discarded by another player
+  std::vector<Card> callable_cards;
+  // 2..20 because honours (pagat=1, XXI and skiz=22) cannot be called
+  for (int rank = 2; rank <= 20; ++rank) {
+    Card card = MakeTarok(rank);
+    CardLocation location = common_state_.deck_[card];
+    if (card == kXX || location != PlayerHandLocation(announcements_.current_player_)) {
+      callable_cards.push_back(card);
+    }
+  }
+  return callable_cards;
+}
+
 std::vector<Action> HungarianTarokState::AnnouncementsLegalActions() const {
   SPIEL_CHECK_FALSE(AnnouncementsPhaseOver());
   if (!announcements_.partner_called_) {
-    if (!common_state_.mandatory_called_card_.has_value() &&
-        PlayerHoldsCard(announcements_.current_player_, MakeTarok(20))) {
-      return {kAnnouncementsActionCallPartner, kAnnouncementsActionCallSelf};
+    std::vector<Card> callable_cards = CallableCards();
+    std::vector<Action> actions;
+    for (Card card : callable_cards) {
+      actions.push_back(static_cast<Action>(card));
     }
-    return {kAnnouncementsActionCallPartner};
+    return actions;
   }
 
   std::vector<Action> actions;
@@ -217,46 +266,30 @@ std::vector<Action> HungarianTarokState::AnnouncementsLegalActions() const {
 }
 
 void HungarianTarokState::AnnouncementsCallPartner(Action action) {
-  auto get_called_card = [&]() -> Card {
-    if (common_state_.mandatory_called_card_.has_value()) {
-      return common_state_.mandatory_called_card_.value();
-    }
+  Card called_card = static_cast<Card>(action);
 
-    Card highest_missing;
-    for (int rank = 20;; --rank) {
-      Card card = MakeTarok(rank);
-      if (!PlayerHoldsCard(announcements_.current_player_, card)) {
-        highest_missing = card;
-        break;
-      }
-    }
-    return highest_missing;
-  };
+  CardLocation location = common_state_.deck_[called_card];
+  common_state_.partner_ =
+      IsPlayerHand(location)
+          ? std::optional<Player>(HandLocationPlayer(location))
+          : std::nullopt;
 
-  if (action == kAnnouncementsActionCallPartner) {
-    CardLocation location = common_state_.deck_[get_called_card()];
-    common_state_.partner_ =
-        IsPlayerHand(location)
-            ? std::optional<Player>(HandLocationPlayer(location))
-            : std::nullopt;
-  } else {
-    common_state_.partner_ = std::nullopt;
-  }
-
-  if (common_state_.partner_ == common_state_.declarer_) {
-    throw std::invalid_argument("Partner cannot be the declarer themselves.");
-  }
-  SPIEL_CHECK_NE(common_state_.partner_, common_state_.declarer_);
   announcements_.partner_called_ = true;
   announcements_.last_to_speak_ = common_state_.declarer_;
 
   for (Player p = 0; p < kNumPlayers; ++p) {
     common_state_.player_sides_[p] =
-        (p == common_state_.declarer_ ||
-         (common_state_.partner_.has_value() && p == *common_state_.partner_))
+        (p == common_state_.declarer_ || (p == common_state_.partner_))
             ? Side::kDeclarer
             : Side::kOpponents;
   }
+}
+
+void HungarianTarokState::AnnouncementsDoApplyCallHighestMissingTarok() {
+  SPIEL_CHECK_EQ(current_phase_, PhaseType::kAnnouncements);
+  SPIEL_CHECK_FALSE(announcements_.partner_called_);
+  Card called_card = HighestMissingTarok();
+  AnnouncementsCallPartner(static_cast<Action>(called_card));
 }
 
 void HungarianTarokState::AnnouncementsDoApplyAction(Action action) {
@@ -336,10 +369,7 @@ std::string HungarianTarokState::AnnouncementsActionToString(
   std::vector<Action> legal_actions = AnnouncementsLegalActions();
   SPIEL_CHECK_TRUE(absl::c_find(legal_actions, action) != legal_actions.end());
   if (!announcements_.partner_called_) {
-    if (action == kAnnouncementsActionCallPartner) {
-      return "Call partner";
-    }
-    return "Call self (XX)";
+    return absl::StrCat("Call ", CardToString(static_cast<Card>(action)));
   }
 
   if (action == AnnouncementAction::PassAction()) {

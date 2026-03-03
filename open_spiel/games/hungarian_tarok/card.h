@@ -36,9 +36,12 @@ constexpr Card MakeTarok(int rank) {
   SPIEL_CHECK_LE(rank, 22);
   return rank - 1;
 }
+
 const Card kSkiz = MakeTarok(22);
 const Card kPagat = MakeTarok(1);
 const Card kXXI = MakeTarok(21);
+const Card kXX = MakeTarok(20);
+
 constexpr bool IsHonour(Card card) {
   return card == kPagat || card == kXXI || card == kSkiz;
 }

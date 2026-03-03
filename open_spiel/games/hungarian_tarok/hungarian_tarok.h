@@ -96,6 +96,8 @@ class HungarianTarokState : public State {
     return common_state_.mandatory_called_card_;
   }
 
+  void AnnouncementsDoApplyCallHighestMissingTarok(); // helper for common special case
+
  protected:
   void DoApplyAction(Action move) override;
 
@@ -164,6 +166,8 @@ class HungarianTarokState : public State {
 
   // Announcements.
   Player AnnouncementsCurrentPlayer() const;
+  Card HighestMissingTarok() const;
+  std::vector<Card> CallableCards() const;
   std::vector<Action> AnnouncementsLegalActions() const;
   void AnnouncementsDoApplyAction(Action action);
   bool AnnouncementsPhaseOver() const;

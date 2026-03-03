@@ -66,9 +66,6 @@ struct Bid {
   bool NextBidCanBe(Action action, bool first_bid) const;
 };
 
-constexpr Action kAnnouncementsActionCallPartner = 0;
-constexpr Action kAnnouncementsActionCallSelf = 1;
-
 constexpr Action kDontAnnul = 0;
 constexpr Action kAnnulTaroks = 1;
 constexpr Action kAnnulKings = 2;
