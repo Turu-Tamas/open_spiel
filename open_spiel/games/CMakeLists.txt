@@ -107,7 +107,14 @@ set(GAME_SOURCES
   hungarian_tarok/card.h
   hungarian_tarok/card.cc
   hungarian_tarok/phases.h
-  hungarian_tarok/phases.cc
+  hungarian_tarok/phases/common.cc
+  hungarian_tarok/phases/setup.cc
+  hungarian_tarok/phases/bidding.cc
+  hungarian_tarok/phases/talon.cc
+  hungarian_tarok/phases/annulments.cc
+  hungarian_tarok/phases/skart.cc
+  hungarian_tarok/phases/announcements.cc
+  hungarian_tarok/phases/play.cc
   hungarian_tarok/scoring.h
   hungarian_tarok/scoring.cc
   kriegspiel/kriegspiel.cc
