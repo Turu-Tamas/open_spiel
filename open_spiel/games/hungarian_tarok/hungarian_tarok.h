@@ -95,8 +95,9 @@ class HungarianTarokState : public State {
     SPIEL_CHECK_TRUE(current_phase_ > PhaseType::kBidding);
     return common_state_.mandatory_called_card_;
   }
-
-  void AnnouncementsDoApplyCallHighestMissingTarok(); // helper for common special case
+  
+  // helper for common special case
+  void AnnouncementsDoApplyCallHighestMissingTarok();
 
  protected:
   void DoApplyAction(Action move) override;

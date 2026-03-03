@@ -212,7 +212,6 @@ std::vector<Card> HungarianTarokState::CallableCards() const {
   if (common_state_.mandatory_called_card_.has_value()) {
     return {common_state_.mandatory_called_card_.value()};
   }
-  
   bool tarok_discarded = false;
   for (int rank = 1; rank <= 20; ++rank) {
     CardLocation location = common_state_.deck_[MakeTarok(rank)];
@@ -236,7 +235,8 @@ std::vector<Card> HungarianTarokState::CallableCards() const {
   for (int rank = 2; rank <= 20; ++rank) {
     Card card = MakeTarok(rank);
     CardLocation location = common_state_.deck_[card];
-    if (card == kXX || location != PlayerHandLocation(announcements_.current_player_)) {
+    if (card == kXX ||
+        location != PlayerHandLocation(announcements_.current_player_)) {
       callable_cards.push_back(card);
     }
   }
@@ -269,11 +269,19 @@ void HungarianTarokState::AnnouncementsCallPartner(Action action) {
   Card called_card = static_cast<Card>(action);
 
   CardLocation location = common_state_.deck_[called_card];
-  common_state_.partner_ =
-      IsPlayerHand(location)
-          ? std::optional<Player>(HandLocationPlayer(location))
-          : std::nullopt;
+  if (location == PlayerHandLocation(common_state_.declarer_)) {
+    // called self with XX
+    SPIEL_CHECK_EQ(called_card, kXX);
+    common_state_.partner_ = std::nullopt;
+  } else {
+    // TODO mandatory contra game
+    common_state_.partner_ =
+        IsPlayerHand(location)
+            ? std::optional<Player>(HandLocationPlayer(location))
+            : std::nullopt;
+  }
 
+  SPIEL_CHECK_NE(common_state_.partner_, common_state_.declarer_);
   announcements_.partner_called_ = true;
   announcements_.last_to_speak_ = common_state_.declarer_;
 
