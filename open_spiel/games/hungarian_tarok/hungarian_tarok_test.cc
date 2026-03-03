@@ -323,17 +323,18 @@ void TestTuletroa(std::mt19937& mt) {
 
 ScoringSummary MakeDefaultSummary() {
   ScoringSummary s;
+  s.declarer_side.announced_for(AnnouncementType::kGame) = true;
   s.winning_bid = 3;
   s.has_partner = true;
   s.player_sides = {Side::kDeclarer, Side::kDeclarer, Side::kOpponents,
                     Side::kOpponents};
   // AnnouncementSide default-initializes to all false/0
-  s.declarer_card_points = 50;
   s.truletroa_winner = std::nullopt;
   s.four_kings_winner = std::nullopt;
   s.xxi_catch_winner = std::nullopt;
   s.double_game_winner = std::nullopt;
   s.volat_winner = std::nullopt;
+  s.game_winner = Side::kDeclarer;
   s.pagat_ultimo_result = PagatUltimoResult::kNotInLastTrick;
   s.pagat_holder_side = Side::kDeclarer;
   return s;
@@ -346,7 +347,6 @@ void TestGameScores(const ScoringSummary& base_summary,
 
   for (int i = 0; i < static_cast<int>(expected_declarer_scores.size()); ++i) {
     ScoringSummary s = base_summary;
-    s.declarer_card_points = trick_points[i];
 
     if (trick_points[i] == 0) {
       s.volat_winner = Side::kOpponents;
@@ -358,6 +358,12 @@ void TestGameScores(const ScoringSummary& base_summary,
       s.double_game_winner = Side::kOpponents;
     } else if (trick_points[i] > 70) {
       s.double_game_winner = Side::kDeclarer;
+    }
+
+    if (trick_points[i] > 47) {
+      s.game_winner = Side::kDeclarer;
+    } else {
+      s.game_winner = Side::kOpponents;
     }
 
     int decl_score = expected_declarer_scores[i];
@@ -386,7 +392,6 @@ void ScoringTest() {
     s.has_partner = false;
     s.player_sides = {Side::kDeclarer, Side::kOpponents, Side::kOpponents,
                       Side::kOpponents};
-    s.declarer_card_points = 55;
     s.four_kings_winner = Side::kOpponents;
     SPIEL_CHECK_EQ(CalculateScores(s), (Scores{3, -1, -1, -1}));
   }
@@ -405,7 +410,7 @@ void ScoringTest() {
   // Game loss: -1. Net: +4.
   {
     ScoringSummary s = MakeDefaultSummary();
-    s.declarer_card_points = 40;
+    s.game_winner = Side::kOpponents;
     s.pagat_ultimo_result = PagatUltimoResult::kFailed;
     s.pagat_holder_side = Side::kDeclarer;
     s.opponents_side.announced_for(AnnouncementType::kPagatUltimo) = true;
@@ -417,7 +422,6 @@ void ScoringTest() {
   {
     ScoringSummary s = MakeDefaultSummary();
     s.winning_bid = 2;
-    s.declarer_card_points = 75;
     s.double_game_winner = Side::kDeclarer;
     s.declarer_side.announced_for(AnnouncementType::kDoubleGame) = true;
     s.declarer_side.contra_level_for(AnnouncementType::kDoubleGame) = 1;
@@ -429,7 +433,7 @@ void ScoringTest() {
   // and volat). Net: -3.
   {
     ScoringSummary s = MakeDefaultSummary();
-    s.declarer_card_points = 8;
+    s.game_winner = Side::kOpponents;
     s.double_game_winner = Side::kOpponents;
     s.volat_winner = Side::kOpponents;
     SPIEL_CHECK_EQ(CalculateScores(s), (Scores{-3, -3, 3, 3}));
@@ -439,7 +443,6 @@ void ScoringTest() {
   // 3 game volat: 3 points
   {
     ScoringSummary s = MakeDefaultSummary();
-    s.declarer_card_points = 8;
     s.four_kings_winner = Side::kDeclarer;
     s.volat_winner = Side::kDeclarer;
     SPIEL_CHECK_EQ(CalculateScores(s), (Scores{3, 3, -3, -3}));

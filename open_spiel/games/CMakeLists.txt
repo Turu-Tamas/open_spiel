@@ -109,6 +109,7 @@ set(GAME_SOURCES
   hungarian_tarok/phases.h
   hungarian_tarok/phases.cc
   hungarian_tarok/scoring.h
+  hungarian_tarok/scoring.cc
   kriegspiel/kriegspiel.cc
   kriegspiel/kriegspiel.h
   kuhn_poker/kuhn_poker.cc
