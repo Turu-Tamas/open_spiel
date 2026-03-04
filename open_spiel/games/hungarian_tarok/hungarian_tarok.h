@@ -267,8 +267,12 @@ class HungarianTarokGame : public Game {
   std::unique_ptr<State> NewInitialState() const override;
   int MaxChanceOutcomes() const override { return kDeckSize; }
   int NumPlayers() const override;
-  double MinUtility() const override { return -100'000; }
-  double MaxUtility() const override { return 100'000; }
+  // max is mordkontra everything (5x -> 32x score), declarer is alone -> 3x
+  // both sides announce everything, and one makes all of it -> another 2x
+  // 32 * 3 * 2 * (16 + 24 + 2 + 2 + 10 + 42)
+  // (double game = 16, volat = 24, tuletroa = 2, four kings = 2, pagat ultimo = 10, XXI catch = 42)
+  double MinUtility() const override { return -18432; }
+  double MaxUtility() const override { return 18432; }
   absl::optional<double> UtilitySum() const override { return 0; }
   std::vector<int> ObservationTensorShape() const override;
   int MaxGameLength() const override;

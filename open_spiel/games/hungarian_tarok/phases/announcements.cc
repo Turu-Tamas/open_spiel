@@ -11,10 +11,6 @@ namespace hungarian_tarok {
 
 namespace {
 
-constexpr std::array<const char*, kNumAnnouncementTypes> kAnnouncementTypeNames{
-    "Four Kings",   "Tuletroa",    "Double Game",  "Volat",
-    "Pagat Ultimo", "XXI Capture", "Eight Taroks", "Nine Taroks"};
-
 const char* AnnouncementLevelPrefix(AnnouncementAction::Level level) {
   switch (level) {
     case AnnouncementAction::Level::kAnnounce:
@@ -177,7 +173,7 @@ void HungarianTarokState::AddContraActions(std::vector<Action>& actions) const {
     if (!IsContraAllowedFor(type)) continue;
     if (other_side.announced_for(type) &&
         other_side.contra_level_for(type) % 2 == 0 &&
-        other_side.contra_level_for(type) <= kMaxContraLevel) {
+        other_side.contra_level_for(type) < kMaxContraLevel) {
       actions.push_back(AnnouncementAction::ContraAction(type));
     }
   }
@@ -189,7 +185,7 @@ void HungarianTarokState::AddReContraActions(
   for (int i = 0; i < kNumAnnouncementTypes; ++i) {
     const AnnouncementType type = static_cast<AnnouncementType>(i);
     if (current_side.contra_level_for(type) % 2 == 1 &&
-        current_side.contra_level_for(type) <= kMaxContraLevel) {
+        current_side.contra_level_for(type) < kMaxContraLevel) {
       actions.push_back(AnnouncementAction::ReContraAction(type));
     }
   }
@@ -404,8 +400,38 @@ std::string HungarianTarokState::AnnouncementsActionToString(
 
   AnnouncementAction ann_action = AnnouncementAction::FromAction(action);
   const char* level_str = AnnouncementLevelPrefix(ann_action.level);
-  const char* type_str =
-      kAnnouncementTypeNames[static_cast<int>(ann_action.type)];
+  const char* type_str;
+  switch (ann_action.type) {
+    case AnnouncementType::kGame:
+      type_str = "Game";
+      break;
+    case AnnouncementType::kFourKings:
+      type_str = "Four Kings";
+      break;
+    case AnnouncementType::kTuletroa:
+      type_str = "Tuletroa";
+      break;
+    case AnnouncementType::kDoubleGame:
+      type_str = "Double Game";
+      break;
+    case AnnouncementType::kVolat:
+      type_str = "Volat";
+      break;
+    case AnnouncementType::kPagatUltimo:
+      type_str = "Pagat Ultimo";
+      break;
+    case AnnouncementType::kXXICapture:
+      type_str = "XXI Capture";
+      break;
+    case AnnouncementType::kEightTaroks:
+      type_str = "Eight Taroks";
+      break;
+    case AnnouncementType::kNineTaroks:
+      type_str = "Nine Taroks";
+      break;
+    default:
+      SpielFatalError("Unknown announcement type");
+  }
   return absl::StrCat(level_str, type_str);
 }
 
