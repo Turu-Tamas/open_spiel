@@ -95,9 +95,9 @@ class HungarianTarokState : public State {
     SPIEL_CHECK_TRUE(current_phase_ > PhaseType::kBidding);
     return common_state_.mandatory_called_card_;
   }
-  
+
   // helper for common special case
-  void AnnouncementsDoApplyCallHighestMissingTarok();
+  void AnnouncementsDoApplyCallDefaultPartner();
 
  protected:
   void DoApplyAction(Action move) override;
@@ -247,7 +247,8 @@ class HungarianTarokState : public State {
     Player last_to_speak_ = 0;
     bool first_round_ = true;
     std::array<int, kNumPlayers> tarok_counts_{};
-    std::vector<AnnouncementType> mandatory_announcements_;
+    std::vector<Action> mandatory_announcements_;
+    std::optional<Player> mandatory_contra_player_;
   } announcements_;
 
   struct PlayState {

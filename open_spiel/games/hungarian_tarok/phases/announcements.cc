@@ -269,7 +269,7 @@ void HungarianTarokState::AnnouncementsCallPartner(Action action) {
   Card called_card = static_cast<Card>(action);
 
   CardLocation location = common_state_.deck_[called_card];
-  if (location == PlayerHandLocation(common_state_.declarer_)) {
+  if (PlayerHoldsCard(common_state_.declarer_, called_card)) {
     // called self with XX
     SPIEL_CHECK_EQ(called_card, kXX);
     common_state_.partner_ = std::nullopt;
@@ -285,7 +285,8 @@ void HungarianTarokState::AnnouncementsCallPartner(Action action) {
   announcements_.partner_called_ = true;
   announcements_.last_to_speak_ = common_state_.declarer_;
 
-  for (Player p = 0; p < kNumPlayers; ++p) {
+  for (Player p = 0; p < kNumPlayers;
+       ++p) {  // partner must announce pagat ultimo if they can
     common_state_.player_sides_[p] =
         (p == common_state_.declarer_ || (p == common_state_.partner_))
             ? Side::kDeclarer
@@ -293,11 +294,15 @@ void HungarianTarokState::AnnouncementsCallPartner(Action action) {
   }
 }
 
-void HungarianTarokState::AnnouncementsDoApplyCallHighestMissingTarok() {
+void HungarianTarokState::AnnouncementsDoApplyCallDefaultPartner() {
   SPIEL_CHECK_EQ(current_phase_, PhaseType::kAnnouncements);
   SPIEL_CHECK_FALSE(announcements_.partner_called_);
-  Card called_card = HighestMissingTarok();
-  AnnouncementsCallPartner(static_cast<Action>(called_card));
+
+  if (common_state_.mandatory_called_card_.has_value()) {
+    AnnouncementsDoApplyAction(static_cast<Action>(common_state_.mandatory_called_card_.value()));
+  } else {
+    AnnouncementsDoApplyAction(static_cast<Action>(HighestMissingTarok()));
+  }
 }
 
 void HungarianTarokState::AnnouncementsDoApplyAction(Action action) {
@@ -323,8 +328,16 @@ void HungarianTarokState::AnnouncementsDoApplyAction(Action action) {
         current_player == common_state_.partner_ &&
         !CurrentAnnouncementSide().announced_for(
             AnnouncementType::kPagatUltimo)) {
+      // partner must announce pagat ultimo if they can
       announcements_.mandatory_announcements_.push_back(
-          AnnouncementType::kPagatUltimo);
+          AnnouncementAction::AnnounceAction(AnnouncementType::kPagatUltimo));
+    }
+    bool contrad = common_state_.declarer_side_.contra_level_for(
+                       AnnouncementType::kGame) > 0;
+    if (announcements_.mandatory_contra_player_ == current_player && !contrad) {
+      // mandatory contra game if you discarded the called tarok
+      announcements_.mandatory_announcements_.push_back(
+          AnnouncementAction::ContraAction(AnnouncementType::kGame));
     }
     return;
   }
@@ -345,24 +358,29 @@ void HungarianTarokState::AnnouncementsDoApplyAction(Action action) {
   }
   announcements_.last_to_speak_ = current_player;
 
-  auto it =
-      absl::c_find(announcements_.mandatory_announcements_, ann_action.type);
+  auto it = absl::c_find(announcements_.mandatory_announcements_,
+                         ann_action.ToAction());
   if (it != announcements_.mandatory_announcements_.end()) {
     announcements_.mandatory_announcements_.erase(it);
   }
 
   if (ann_action.type == AnnouncementType::kPagatUltimo &&
       ann_action.level == AnnouncementAction::Level::kAnnounce) {
-    if (announcements_.tarok_counts_[current_player] == 8 &&
-        !CurrentAnnouncementSide().announced_for(
-            AnnouncementType::kEightTaroks)) {
-      announcements_.mandatory_announcements_.push_back(
+    int tarok_count = announcements_.tarok_counts_[current_player];
+    if (tarok_count == 8) {
+      bool announced = CurrentAnnouncementSide().announced_for(
           AnnouncementType::kEightTaroks);
-    } else if (announcements_.tarok_counts_[current_player] == 9 &&
-               !CurrentAnnouncementSide().announced[static_cast<int>(
-                   AnnouncementType::kNineTaroks)]) {
-      announcements_.mandatory_announcements_.push_back(
+      if (!announced) {
+        announcements_.mandatory_announcements_.push_back(
+            AnnouncementAction::AnnounceAction(AnnouncementType::kEightTaroks));
+      }
+    } else if (tarok_count == 9) {
+      bool announced = CurrentAnnouncementSide().announced_for(
           AnnouncementType::kNineTaroks);
+      if (!announced) {
+        announcements_.mandatory_announcements_.push_back(
+            AnnouncementAction::AnnounceAction(AnnouncementType::kNineTaroks));
+      }
     }
   }
 }

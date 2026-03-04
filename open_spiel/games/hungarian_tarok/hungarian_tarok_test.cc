@@ -259,7 +259,7 @@ void TestTuletroa(std::mt19937& mt) {
                   /*XVIII=*/kPlayerXVIII, /*XIX=*/kPlayerXIX, /*XX=*/kPlayerXX),
         mt, bids, called_card);
     PlayTalonSkartAndAnnulments(mt, state);
-    state.AnnouncementsDoApplyCallHighestMissingTarok();
+    state.AnnouncementsDoApplyCallDefaultPartner();
     if (pass_until.has_value()) {
       while (state.CurrentPlayer() != *pass_until) {
         state.ApplyAction(AnnouncementAction::PassAction());
