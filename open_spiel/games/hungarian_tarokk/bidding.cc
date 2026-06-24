@@ -128,12 +128,10 @@ bool BiddingState::IsYieldPosition() const {
 CalledCard BiddingState::CueForBid(Player p, Bid bid) const {
   if (cue_bidder_ != kInvalidPlayer) return CalledCard::kNone;  // one cue only
   if (IsFourthAfterThreePasses()) return CalledCard::kNone;     // never a cue
-  // The "floor" is the weakest bid the player could make to stay in: the
-  // standing bid itself if they may hold it, otherwise the next bid up; with no
-  // standing bid yet it is the weakest bid. A jump is measured from there --
-  // one level up cues the XIX, two levels up cues the XVIII. Anything else (a
-  // non-jump, or an opening solo (the only wider jump possible)) carries no
-  // cue.
+  // The "floor" is the weakest bid the player could make to stay in.
+  // A jump is measured from there -- one level up cues the XIX, two
+  // levels up cues the XVIII. Anything else (a non-jump, or an opening
+  // solo (the only wider jump possible)) carries no cue.
   int floor_strength;
   if (!current_bid_.has_value()) {
     floor_strength = BidStrength(kWeakestBid);
@@ -257,7 +255,9 @@ void BiddingState::AdvanceOrFinish() {
   if (current_bidder_ != kInvalidPlayer) {
     bool others_all_passed = true;
     for (Player q = 0; q < NumPlayers(); ++q) {
-      if (q != current_bidder_ && !passed_[q]) {
+      // The cue-bidder does not participate in the bidding after making
+      // the cue bid, as if they have passed
+      if (q != current_bidder_ && !passed_[q] && q != cue_bidder_) {
         others_all_passed = false;
         break;
       }
@@ -281,10 +281,12 @@ void BiddingState::AdvanceOrFinish() {
     }
   }
 
+  // The cue-bidder does not participate in the bidding after making
+  // the cue bid, as if they have passed
   Player q = current_player_;
   do {
     q = (q + 1) % NumPlayers();
-  } while (passed_[q]);
+  } while (passed_[q] || q == cue_bidder_);
   current_player_ = q;
 }
 

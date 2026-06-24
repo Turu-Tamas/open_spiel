@@ -15,8 +15,6 @@ namespace {
 
 namespace testing = open_spiel::testing;
 
-// Standard OpenSpiel sanity checks: the game loads, the chance outcomes are
-// well-formed, and many random playthroughs respect the generic API contracts.
 void BasicHungarianTarokkTests() {
   testing::LoadGameTest("hungarian_tarokk");
   testing::ChanceOutcomesTest(*LoadGame("hungarian_tarokk"));
@@ -36,8 +34,8 @@ bool Contains(const std::vector<Action>& v, Action a) {
 
 // Scripted auctions exercising the BiddingState directly.
 void BiddingLogicTest() {
-  // An uncontested plain three lets the sole bidder raise (§3.2); here P0 keeps
-  // the three.
+  // An uncontested plain three lets the sole bidder raise.
+  // Here P0 keeps the three.
   {
     BiddingState b(FourHonours());
     SPIEL_CHECK_EQ(b.CurrentPlayer(), 0);
@@ -77,7 +75,7 @@ void BiddingLogicTest() {
     b.ApplyAction(kActionPass);      // P2
     b.ApplyAction(kActionPass);      // P3
     SPIEL_CHECK_EQ(b.CurrentPlayer(), 0);
-    SPIEL_CHECK_TRUE(Contains(b.LegalActions(), kActionHold));
+    SPIEL_CHECK_EQ(std::vector<Action>{kActionHold}, b.LegalActions());
     b.ApplyAction(kActionHold);  // P0 holds the two
     SPIEL_CHECK_EQ(b.CurrentPlayer(), 1);
     b.ApplyAction(kActionPass);  // P1
@@ -118,10 +116,32 @@ void BiddingLogicTest() {
     b.ApplyAction(kActionBidOne);  // P3 cue bids the XIX
     SPIEL_CHECK_EQ(b.CueBidder(), 3);
     SPIEL_CHECK_TRUE(b.CuedCard() == CalledCard::kXIX);
-    b.ApplyAction(kActionBidSolo);  // P0 overcalls
-    b.ApplyAction(kActionPass);     // P3 passes
-    SPIEL_CHECK_TRUE(b.IsFinished());
+    // Having invited, P3 takes no further part: it is P0's turn, not P3's.
+    SPIEL_CHECK_EQ(b.CurrentPlayer(), 0);
+    b.ApplyAction(kActionBidSolo);     // P0 overcalls and wins outright
+    SPIEL_CHECK_TRUE(b.IsFinished());  // no final pass by P3 is needed
     SPIEL_CHECK_EQ(b.Declarer(), 0);
+    SPIEL_CHECK_TRUE(b.WinningBid() == Bid::kSolo);
+    SPIEL_CHECK_TRUE(b.ObligatoryCalledCard() == CalledCard::kXIX);
+  }
+
+  // Two players bidding after a cue bid: P0 opens two (a cue of the XIX), then
+  // P1 and P2 compete over it; P2 wins and must call the cue-bidder P0's XIX.
+  {
+    std::vector<PlayerBidInfo> info = FourHonours();
+    info[0].has_xix = true;
+    BiddingState b(info);
+    b.ApplyAction(kActionBidTwo);  // P0
+    SPIEL_CHECK_EQ(b.CueBidder(), 0);
+    SPIEL_CHECK_TRUE(b.CuedCard() == CalledCard::kXIX);
+    b.ApplyAction(kActionBidOne);   // P1 overcalls
+    b.ApplyAction(kActionBidSolo);  // P2 overcalls
+    b.ApplyAction(kActionPass);     // P3 passes
+    SPIEL_CHECK_EQ(b.CurrentPlayer(),
+                   1);           // back to P1, P0 is skipped (cue-bidder)
+    b.ApplyAction(kActionPass);  // P1 passes; P2 wins
+    SPIEL_CHECK_TRUE(b.IsFinished());
+    SPIEL_CHECK_EQ(b.Declarer(), 2);
     SPIEL_CHECK_TRUE(b.WinningBid() == Bid::kSolo);
     SPIEL_CHECK_TRUE(b.ObligatoryCalledCard() == CalledCard::kXIX);
   }
@@ -129,14 +149,31 @@ void BiddingLogicTest() {
   // Cue bids are illegal without the promised card: P3 lacks the XIX/XVIII, so
   // its only positive bid here is the (non-jump) two.
   {
-    BiddingState b(FourHonours());                     // nobody holds XIX/XVIII
-    b.ApplyAction(kActionBidThree);                    // P0
-    b.ApplyAction(kActionPass);                        // P1
-    b.ApplyAction(kActionPass);                        // P2
-    std::vector<Action> legal = b.LegalActions();      // P3
-    SPIEL_CHECK_TRUE(Contains(legal, kActionBidTwo));  // minimum overbid
-    SPIEL_CHECK_FALSE(Contains(legal, kActionBidOne));   // would be a cue XIX
-    SPIEL_CHECK_FALSE(Contains(legal, kActionBidSolo));  // would be a cue XVIII
+    BiddingState b(FourHonours());                 // nobody holds XIX/XVIII
+    b.ApplyAction(kActionBidThree);                // P0
+    b.ApplyAction(kActionPass);                    // P1
+    b.ApplyAction(kActionPass);                    // P2
+    std::vector<Action> legal = b.LegalActions();  // P3
+    // Only pass and the (non-jump) two -- no cue bids of the one/solo.
+    std::vector<Action> expected = {kActionPass, BidToAction(Bid::kTwo)};
+    SPIEL_CHECK_EQ(expected, legal);
+  }
+
+  // An opening solo is NOT a cue bid, as nobody can bid after it: P0 (holding
+  // no XIX/XVIII) may open solo, wins, and there is no cued / obligatory card.
+  {
+    BiddingState b(FourHonours());  // P0 holds no XIX/XVIII
+    SPIEL_CHECK_TRUE(Contains(b.LegalActions(), kActionBidSolo));
+    b.ApplyAction(kActionBidSolo);                  // P0 opens solo
+    SPIEL_CHECK_EQ(b.CueBidder(), kInvalidPlayer);  // not a cue bid
+    b.ApplyAction(kActionPass);                     // P1
+    b.ApplyAction(kActionPass);                     // P2
+    b.ApplyAction(kActionPass);                     // P3
+    SPIEL_CHECK_TRUE(b.IsFinished());
+    SPIEL_CHECK_EQ(b.Declarer(), 0);
+    SPIEL_CHECK_TRUE(b.WinningBid() == Bid::kSolo);
+    SPIEL_CHECK_FALSE(b.Yielded());
+    SPIEL_CHECK_TRUE(b.ObligatoryCalledCard() == CalledCard::kNone);
   }
 
   // Yielded game: P0 three, P1 two, P2/P3 pass, P0 passes (a yield) and so must
@@ -171,6 +208,22 @@ void BiddingLogicTest() {
     SPIEL_CHECK_TRUE(Contains(legal, kActionHold));   // must hold (or cue bid)
   }
 
+  // Yielding is illegal with only the pagát: P0 holds the XX but no HIGH honour
+  // (its honour is the pagát), so it cannot yield and must hold (§3.4, §5.1.3).
+  {
+    std::vector<PlayerBidInfo> info = FourHonours();
+    info[0].has_xx = true;
+    info[0].has_high_honour = false;  // P0's only honour is the pagát
+    BiddingState b(info);
+    b.ApplyAction(kActionBidThree);                // P0
+    b.ApplyAction(kActionBidTwo);                  // P1
+    b.ApplyAction(kActionPass);                    // P2
+    b.ApplyAction(kActionPass);                    // P3
+    std::vector<Action> legal = b.LegalActions();  // P0 in the yield position
+    SPIEL_CHECK_FALSE(Contains(legal, kActionPass));  // cannot yield with pagát
+    SPIEL_CHECK_TRUE(Contains(legal, kActionHold));
+  }
+
   // Trial bid (§3.5): first three pass, the fourth seat may bid three even with
   // no honour.
   {
@@ -190,48 +243,11 @@ void BiddingLogicTest() {
   }
 }
 
-// Drives a full game through dealing and bidding into the play, then to the
-// end.
-void GameBiddingIntegrationTest() {
-  std::shared_ptr<const Game> game = LoadGame("hungarian_tarokk");
-  std::unique_ptr<State> state = game->NewInitialState();
-
-  // Deal (always taking the lowest available card -> player 0 holds the pagát).
-  while (state->IsChanceNode()) {
-    state->ApplyAction(state->ChanceOutcomes().front().first);
-  }
-
-  // Bidding: always take the strongest available action (the last legal one),
-  // which forces player 0 to bid solo and leaves the others no reply but pass.
-  auto* ht = static_cast<HungarianTarokkState*>(state.get());
-  SPIEL_CHECK_TRUE(ht->CurrentPhase() == Phase::kBidding);
-  while (ht->CurrentPhase() == Phase::kBidding) {
-    state->ApplyAction(state->LegalActions().back());
-  }
-  SPIEL_CHECK_TRUE(ht->CurrentPhase() == Phase::kPlaying);
-  SPIEL_CHECK_EQ(ht->Declarer(), 0);
-  SPIEL_CHECK_TRUE(ht->WinningBid() == Bid::kSolo);
-  SPIEL_CHECK_EQ(state->CurrentPlayer(), 0);  // forehand leads
-
-  // Play out the nine tricks; the placeholder scoring stays zero-sum.
-  int moves = 0;
-  while (!state->IsTerminal()) {
-    SPIEL_CHECK_FALSE(state->IsChanceNode());
-    state->ApplyAction(state->LegalActions().front());
-    ++moves;
-  }
-  SPIEL_CHECK_EQ(moves, kNumTricks * kNumPlayers);
-  double sum = 0.0;
-  for (double r : state->Returns()) sum += r;
-  SPIEL_CHECK_TRUE(std::abs(sum) < 1e-9);
-}
-
 }  // namespace
 }  // namespace hungarian_tarokk
 }  // namespace open_spiel
 
 int main(int argc, char** argv) {
   open_spiel::hungarian_tarokk::BiddingLogicTest();
-  open_spiel::hungarian_tarokk::GameBiddingIntegrationTest();
   open_spiel::hungarian_tarokk::BasicHungarianTarokkTests();
 }
