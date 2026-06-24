@@ -128,6 +128,8 @@ set(GAME_SOURCES
   hungarian_tarokk/bidding.h
   hungarian_tarokk/cards.cc
   hungarian_tarokk/cards.h
+  hungarian_tarokk/talon.cc
+  hungarian_tarokk/talon.h
   kriegspiel/kriegspiel.cc
   kriegspiel/kriegspiel.h
   kuhn_poker/kuhn_poker.cc

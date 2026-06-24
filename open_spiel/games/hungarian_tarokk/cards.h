@@ -17,6 +17,9 @@
 namespace open_spiel {
 namespace hungarian_tarokk {
 
+inline constexpr int kNumPlayers = 4;
+inline constexpr int kNumTricks = 9;
+
 inline constexpr int kNumCards = 42;
 inline constexpr int kNumTarokks = 22;  // trumps, action ids 0..21
 inline constexpr int kNumSuits = 4;     // hearts, diamonds, clubs, spades
@@ -30,8 +33,7 @@ inline constexpr int kTotalCardPoints = 94;
 // Pseudo-"suit" returned by CardSuit() for tarokks (trumps).
 inline constexpr int kTarokkSuit = kNumSuits;  // 4
 
-// Named tarokks referenced by the bidding conventions (a tarokk's action id is
-// one less than its Roman numeral; the pagát is the I).
+// a tarokk's action id is one less than its Roman numeral; the pagát is the I.
 inline constexpr Action kCardPagat = 0;
 inline constexpr Action kCardXVIII = 17;
 inline constexpr Action kCardXIX = 18;
@@ -54,6 +56,16 @@ bool HandHasCard(const std::vector<Action>& hand, Action card);
 bool HandHasHonour(const std::vector<Action>& hand);
 // High honours are the XXI and the Skíz.
 bool HandHasHighHonour(const std::vector<Action>& hand);
+bool IsKing(Action card);
+// Whether a card may be put in the skart: it is illegal to discard an honour
+// (Skíz, XXI, pagát), a king or the XX. (A cue-bidder additionally may not
+// discard the promised tarokk -- that is enforced by the caller, which knows
+// the bidding.)
+bool IsDiscardableCard(Action card);
+// Whether the hand qualifies to be thrown in (annulled), see rules.md §4.4:
+// all four kings, a lone XXI, a lone pagát, the XXI + pagát only, or no
+// tarokks.
+bool HandIsAnnullable(const std::vector<Action>& hand);
 bool CardBeats(Action best, Action candidate, int led_suit);
 
 std::string CardToString(Action card);

@@ -70,6 +70,40 @@ bool HandHasHighHonour(const std::vector<Action>& hand) {
   return HandHasCard(hand, kCardXXI) || HandHasCard(hand, kCardSkiz);
 }
 
+bool IsKing(Action card) {
+  return !IsTarokk(card) && CardRank(card) == kCardsPerSuit - 1;
+}
+
+bool IsDiscardableCard(Action card) {
+  if (IsKing(card)) return false;
+  if (card == kCardPagat || card == kCardXXI || card == kCardSkiz) {
+    return false;  // honours
+  }
+  if (card == kCardXX) return false;
+  return true;
+}
+
+bool HandIsAnnullable(const std::vector<Action>& hand) {
+  int kings = 0;
+  int tarokks = 0;
+  bool has_pagat = false;
+  bool has_xxi = false;
+  for (Action c : hand) {
+    if (IsKing(c)) ++kings;
+    if (IsTarokk(c)) {
+      ++tarokks;
+      if (c == kCardPagat) has_pagat = true;
+      if (c == kCardXXI) has_xxi = true;
+    }
+  }
+  if (kings == kNumSuits) return true;
+  if (tarokks == 0) return true;
+  if (tarokks == 1 && has_xxi) return true;
+  if (tarokks == 1 && has_pagat) return true;
+  if (tarokks == 2 && has_xxi && has_pagat) return true;
+  return false;
+}
+
 bool CardBeats(Action best, Action candidate, int led_suit) {
   bool best_t = IsTarokk(best);
   bool cand_t = IsTarokk(candidate);

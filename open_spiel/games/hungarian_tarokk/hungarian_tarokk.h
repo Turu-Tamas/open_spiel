@@ -9,6 +9,7 @@
 #include "open_spiel/abseil-cpp/absl/types/optional.h"
 #include "open_spiel/games/hungarian_tarokk/bidding.h"
 #include "open_spiel/games/hungarian_tarokk/cards.h"
+#include "open_spiel/games/hungarian_tarokk/talon.h"
 #include "open_spiel/spiel.h"
 
 namespace open_spiel {
@@ -21,7 +22,14 @@ inline constexpr int kCardsDealtToPlayers = kNumPlayers * kHandSize;  // 36
 // A comfortable upper bound, the maximum is lower.
 inline constexpr int kMaxBiddingDecisions = 16;
 
-enum class Phase { kDealing, kBidding, kPlaying, kFinished };
+// The bidding action ids live in bidding.h (42..47) and the talon-exchange ones
+// in talon.h (48..91); the total action count runs up to the last of them.
+inline constexpr int kNumDistinctActions = kActionDeclineAnnul + 1;  // 92
+
+// The phases the parent state orchestrates. The auction and the talon exchange
+// are each a single phase delegated to their own sub-state-machine (bidding.h,
+// talon.h); the parent itself only handles dealing, play and the transitions.
+enum class Phase { kDealing, kBidding, kTalonExchange, kPlaying, kFinished };
 
 class HungarianTarokkState : public State {
  public:
@@ -41,14 +49,16 @@ class HungarianTarokkState : public State {
 
   Phase CurrentPhase() const { return phase_; }
   std::vector<Action> PlayerCards(Player player) const {
-    return players_cards_[player];
+    return CurrentHands()[player];
   }
-  std::vector<Action> Talon() const { return talon_; }
+  std::vector<Action> Talon() const { return CurrentTalon(); }
   const BiddingState& Bidding() const { return bidding_; }
   // kInvalidPlayer until the auction has produced a declarer (and stays so for
   // a passed-out hand).
   Player Declarer() const { return declarer_; }
   Bid WinningBid() const { return winning_bid_; }
+  // True if a player threw the hand in during the annulment phase.
+  bool IsAnnulled() const { return annulled_; }
 
  protected:
   void DoApplyAction(Action action_id) override;
@@ -56,17 +66,28 @@ class HungarianTarokkState : public State {
  private:
   std::vector<Action> LegalPlayActions() const;
   void ResolveTrick();
+  void StartPlaying();
   std::string PublicLogString() const;
+  // The hands / skart / talon currently live inside talon_exchange_ during the
+  // exchange and in the parent's own members otherwise; these resolve to the
+  // right one.
+  const std::vector<std::vector<Action>>& CurrentHands() const;
+  const std::vector<std::vector<Action>>& CurrentDiscards() const;
+  const std::vector<Action>& CurrentTalon() const;
 
   Phase phase_ = Phase::kDealing;
   Player current_player_ = kChancePlayerId;
   int cards_dealt_ = 0;
   std::vector<Action> deck_;                        // undealt cards (sorted)
-  std::vector<std::vector<Action>> players_cards_;  // current hands
-  std::vector<Action> talon_;                       // 6 unused cards
+  std::vector<std::vector<Action>> players_cards_;  // hands (outside the talon)
+  std::vector<Action> talon_;                       // talon (outside the talon)
   BiddingState bidding_;
   Player declarer_ = kInvalidPlayer;
   Bid winning_bid_ = Bid::kThree;
+  TalonExchangeState talon_exchange_;
+  std::vector<std::vector<Action>>
+      discarded_;  // each player's skart, post-talon
+  bool annulled_ = false;
   std::array<int, kNumPlayers> collected_points_;
   Player trick_leader_ = 0;
   std::vector<Action> trick_cards_;  // current (partial) trick
@@ -77,9 +98,7 @@ class HungarianTarokkState : public State {
 class HungarianTarokkGame : public Game {
  public:
   explicit HungarianTarokkGame(const GameParameters& params);
-  int NumDistinctActions() const override {
-    return kNumCards + kNumBiddingActions;
-  }
+  int NumDistinctActions() const override { return kNumDistinctActions; }
   std::unique_ptr<State> NewInitialState() const override {
     return std::unique_ptr<State>(new HungarianTarokkState(shared_from_this()));
   }
@@ -89,7 +108,10 @@ class HungarianTarokkGame : public Game {
   double MaxUtility() const override { return kTotalCardPoints; }
   absl::optional<double> UtilitySum() const override { return 0.0; }
   int MaxGameLength() const override {
-    return kMaxBiddingDecisions + kCardsDealtToPlayers;
+    // Bidding + at most one annulment decision per player + the six discards +
+    // the nine tricks.
+    return kMaxBiddingDecisions + kNumPlayers + kTalonSize +
+           kCardsDealtToPlayers;
   }
 };
 

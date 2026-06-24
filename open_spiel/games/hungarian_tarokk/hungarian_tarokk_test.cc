@@ -243,11 +243,113 @@ void BiddingLogicTest() {
   }
 }
 
+// The card helpers used by discarding and annulment (rules.md §4).
+void CardHelperTest() {
+  // The four kings are the highest card of each suit.
+  SPIEL_CHECK_TRUE(IsKing(26));   // king of hearts
+  SPIEL_CHECK_TRUE(IsKing(41));   // king of spades
+  SPIEL_CHECK_FALSE(IsKing(25));  // queen of hearts
+  SPIEL_CHECK_FALSE(IsKing(kCardSkiz));
+
+  // Honours, kings and the XX may not be put in the skart; anything else may.
+  SPIEL_CHECK_FALSE(IsDiscardableCard(kCardPagat));
+  SPIEL_CHECK_FALSE(IsDiscardableCard(kCardXXI));
+  SPIEL_CHECK_FALSE(IsDiscardableCard(kCardSkiz));
+  SPIEL_CHECK_FALSE(IsDiscardableCard(kCardXX));
+  SPIEL_CHECK_FALSE(IsDiscardableCard(26));       // a king
+  SPIEL_CHECK_TRUE(IsDiscardableCard(kCardXIX));  // an ordinary tarokk
+  SPIEL_CHECK_TRUE(IsDiscardableCard(25));        // a queen
+
+  // Annullable holdings (rules.md §4.4); the rest of each hand is suit cards.
+  SPIEL_CHECK_TRUE(
+      HandIsAnnullable({26, 31, 36, 41, 22, 23, 24, 25, 27}));  // 4 kings
+  SPIEL_CHECK_TRUE(
+      HandIsAnnullable({22, 23, 24, 25, 26, 27, 28, 29, 30}));  // no tarokks
+  SPIEL_CHECK_TRUE(HandIsAnnullable(
+      {kCardXXI, 22, 23, 24, 25, 27, 28, 29, 30}));  // lone XXI
+  SPIEL_CHECK_TRUE(HandIsAnnullable(
+      {kCardPagat, 22, 23, 24, 25, 27, 28, 29, 30}));  // lone pagát
+  SPIEL_CHECK_TRUE(HandIsAnnullable(
+      {kCardPagat, kCardXXI, 22, 23, 24, 25, 27, 28, 30}));  // XXI + pagát
+
+  SPIEL_CHECK_FALSE(
+      HandIsAnnullable({5, 9, 22, 23, 24, 25, 26, 27, 28}));  // two tarokks
+  SPIEL_CHECK_FALSE(HandIsAnnullable(
+      {kCardXXI, 5, 22, 23, 24, 25, 27, 28, 30}));  // XXI + a tarokk
+  SPIEL_CHECK_FALSE(
+      HandIsAnnullable({26, 31, 36, 5, 22, 23, 24, 25, 27}));  // only 3 kings
+}
+
+// Drives the talon exchange and discarding through the game, using the
+// deterministic deal (every chance node takes the lowest available card, so
+// player p is dealt {p, p+4, ...} and player 0 holds the pagát).
+void TalonDiscardTest() {
+  std::shared_ptr<const Game> game = LoadGame("hungarian_tarokk");
+  std::unique_ptr<State> state = game->NewInitialState();
+  auto* ht = static_cast<HungarianTarokkState*>(state.get());
+
+  while (state->IsChanceNode()) {
+    state->ApplyAction(state->ChanceOutcomes().front().first);  // deal
+  }
+
+  // P0 bids three uncontested, then keeps it (the sole-bidder raise).
+  SPIEL_CHECK_TRUE(ht->CurrentPhase() == Phase::kBidding);
+  state->ApplyAction(kActionBidThree);  // P0
+  state->ApplyAction(kActionPass);      // P1
+  state->ApplyAction(kActionPass);      // P2
+  state->ApplyAction(kActionPass);      // P3
+  state->ApplyAction(kActionPass);      // P0 keeps the three
+  SPIEL_CHECK_EQ(ht->Declarer(), 0);
+  SPIEL_CHECK_TRUE(ht->WinningBid() == Bid::kThree);
+
+  // The talon exchange begins with the draw (a chance step): with a "three" the
+  // declarer draws 3 and each opponent draws 1.
+  SPIEL_CHECK_TRUE(ht->CurrentPhase() == Phase::kTalonExchange);
+  while (state->IsChanceNode()) {
+    state->ApplyAction(state->ChanceOutcomes().front().first);
+  }
+  SPIEL_CHECK_EQ(static_cast<int>(ht->PlayerCards(0).size()), kHandSize + 3);
+  for (Player p = 1; p < kNumPlayers; ++p) {
+    SPIEL_CHECK_EQ(static_cast<int>(ht->PlayerCards(p).size()), kHandSize + 1);
+  }
+
+  // No annullable hand here, so the exchange goes straight to discarding (still
+  // the same parent phase). Discard back to nine, always taking the first legal
+  // discard, and check that no forbidden card (honour, king or XX) is offered.
+  SPIEL_CHECK_TRUE(ht->CurrentPhase() == Phase::kTalonExchange);
+  while (ht->CurrentPhase() == Phase::kTalonExchange) {
+    std::vector<Action> legal = state->LegalActions();
+    SPIEL_CHECK_FALSE(legal.empty());
+    for (Action a : legal) {
+      SPIEL_CHECK_TRUE(IsDiscardAction(a));
+      SPIEL_CHECK_TRUE(IsDiscardableCard(CardForDiscardAction(a)));
+    }
+    state->ApplyAction(legal.front());
+  }
+
+  // Every hand is back to nine and the play has begun.
+  for (Player p = 0; p < kNumPlayers; ++p) {
+    SPIEL_CHECK_EQ(static_cast<int>(ht->PlayerCards(p).size()), kHandSize);
+  }
+  SPIEL_CHECK_TRUE(ht->CurrentPhase() == Phase::kPlaying);
+  SPIEL_CHECK_EQ(state->CurrentPlayer(), 0);  // forehand leads
+
+  // Play to the end; the placeholder scoring stays zero-sum.
+  while (!state->IsTerminal()) {
+    state->ApplyAction(state->LegalActions().front());
+  }
+  double sum = 0.0;
+  for (double r : state->Returns()) sum += r;
+  SPIEL_CHECK_TRUE(std::abs(sum) < 1e-9);
+}
+
 }  // namespace
 }  // namespace hungarian_tarokk
 }  // namespace open_spiel
 
 int main(int argc, char** argv) {
   open_spiel::hungarian_tarokk::BiddingLogicTest();
+  open_spiel::hungarian_tarokk::CardHelperTest();
+  open_spiel::hungarian_tarokk::TalonDiscardTest();
   open_spiel::hungarian_tarokk::BasicHungarianTarokkTests();
 }
