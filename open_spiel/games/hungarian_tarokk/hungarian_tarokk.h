@@ -15,8 +15,6 @@
 namespace open_spiel {
 namespace hungarian_tarokk {
 
-inline constexpr int kNumPlayers = 4;
-inline constexpr int kNumTricks = 9;
 inline constexpr int kCardsDealtToPlayers = kNumPlayers * kHandSize;  // 36
 
 // A comfortable upper bound, the maximum is lower.

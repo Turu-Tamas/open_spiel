@@ -118,7 +118,7 @@ bool CardBeats(Action best, Action candidate, int led_suit) {
 
 std::string CardToString(Action card) {
   if (IsTarokk(card)) {
-    if (card == 21) return "Skiz";
+    if (card == kCardSkiz) return "Skiz";
     return RomanNumeral(card + 1);
   }
   static const char* const kRankNames[kCardsPerSuit] = {"Low", "Jack", "Rider",

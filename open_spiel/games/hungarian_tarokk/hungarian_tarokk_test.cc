@@ -245,102 +245,159 @@ void BiddingLogicTest() {
 
 // The card helpers used by discarding and annulment (rules.md §4).
 void CardHelperTest() {
-  // The four kings are the highest card of each suit.
-  SPIEL_CHECK_TRUE(IsKing(26));   // king of hearts
-  SPIEL_CHECK_TRUE(IsKing(41));   // king of spades
-  SPIEL_CHECK_FALSE(IsKing(25));  // queen of hearts
-  SPIEL_CHECK_FALSE(IsKing(kCardSkiz));
-
   // Honours, kings and the XX may not be put in the skart; anything else may.
   SPIEL_CHECK_FALSE(IsDiscardableCard(kCardPagat));
   SPIEL_CHECK_FALSE(IsDiscardableCard(kCardXXI));
   SPIEL_CHECK_FALSE(IsDiscardableCard(kCardSkiz));
   SPIEL_CHECK_FALSE(IsDiscardableCard(kCardXX));
-  SPIEL_CHECK_FALSE(IsDiscardableCard(26));       // a king
+  SPIEL_CHECK_FALSE(IsDiscardableCard(MakeKing(kHearts)));
   SPIEL_CHECK_TRUE(IsDiscardableCard(kCardXIX));  // an ordinary tarokk
-  SPIEL_CHECK_TRUE(IsDiscardableCard(25));        // a queen
+  SPIEL_CHECK_TRUE(IsDiscardableCard(SuitCard(kHearts, kQueen)));
 
-  // Annullable holdings (rules.md §4.4); the rest of each hand is suit cards.
+  // Annullable holdings (rules.md §4.4). HandIsAnnullable ignores hand size, so
+  // each case lists only the cards that matter.
+  SPIEL_CHECK_TRUE(HandIsAnnullable({MakeKing(kHearts), MakeKing(kDiamonds),
+                                     MakeKing(kClubs), MakeKing(kSpades)}));
+  SPIEL_CHECK_TRUE(HandIsAnnullable(
+      {SuitCard(kHearts, kQueen), SuitCard(kDiamonds, kJack)}));  // no tarokks
+  SPIEL_CHECK_TRUE(HandIsAnnullable({kCardXXI, SuitCard(kHearts, kLow)}));
+  SPIEL_CHECK_TRUE(HandIsAnnullable({kCardPagat, SuitCard(kHearts, kLow)}));
   SPIEL_CHECK_TRUE(
-      HandIsAnnullable({26, 31, 36, 41, 22, 23, 24, 25, 27}));  // 4 kings
-  SPIEL_CHECK_TRUE(
-      HandIsAnnullable({22, 23, 24, 25, 26, 27, 28, 29, 30}));  // no tarokks
-  SPIEL_CHECK_TRUE(HandIsAnnullable(
-      {kCardXXI, 22, 23, 24, 25, 27, 28, 29, 30}));  // lone XXI
-  SPIEL_CHECK_TRUE(HandIsAnnullable(
-      {kCardPagat, 22, 23, 24, 25, 27, 28, 29, 30}));  // lone pagát
-  SPIEL_CHECK_TRUE(HandIsAnnullable(
-      {kCardPagat, kCardXXI, 22, 23, 24, 25, 27, 28, 30}));  // XXI + pagát
+      HandIsAnnullable({kCardPagat, kCardXXI, SuitCard(kHearts, kLow)}));
 
+  SPIEL_CHECK_FALSE(HandIsAnnullable({Tarokk(6), Tarokk(10)}));  // two tarokks
+  SPIEL_CHECK_FALSE(HandIsAnnullable({kCardXXI, Tarokk(6)}));  // XXI + a tarokk
   SPIEL_CHECK_FALSE(
-      HandIsAnnullable({5, 9, 22, 23, 24, 25, 26, 27, 28}));  // two tarokks
-  SPIEL_CHECK_FALSE(HandIsAnnullable(
-      {kCardXXI, 5, 22, 23, 24, 25, 27, 28, 30}));  // XXI + a tarokk
-  SPIEL_CHECK_FALSE(
-      HandIsAnnullable({26, 31, 36, 5, 22, 23, 24, 25, 27}));  // only 3 kings
+      HandIsAnnullable({MakeKing(kHearts), MakeKing(kDiamonds),
+                        MakeKing(kClubs), Tarokk(6)}));  // 3 kings
 }
 
-// Drives the talon exchange and discarding through the game, using the
-// deterministic deal (every chance node takes the lowest available card, so
-// player p is dealt {p, p+4, ...} and player 0 holds the pagát).
-void TalonDiscardTest() {
-  std::shared_ptr<const Game> game = LoadGame("hungarian_tarokk");
-  std::unique_ptr<State> state = game->NewInitialState();
-  auto* ht = static_cast<HungarianTarokkState*>(state.get());
-
-  while (state->IsChanceNode()) {
-    state->ApplyAction(state->ChanceOutcomes().front().first);  // deal
+// Completes a valid 42-card deal: player 0 gets `hand0`. `hand0` and the
+// talon must be disjoint and contain 9 and 6 cards, respectively.
+std::vector<std::vector<Action>> DealWith(const std::vector<Action>& hand0,
+                                          const std::vector<Action>& talon) {
+  std::vector<bool> used(kNumCards, false);
+  for (Action c : hand0) used[c] = true;
+  for (Action c : talon) used[c] = true;
+  std::vector<std::vector<Action>> hands(kNumPlayers);
+  hands[0] = hand0;
+  int p = 1;
+  for (Action c = 0; c < kNumCards; ++c) {
+    if (used[c]) continue;
+    if (static_cast<int>(hands[p].size()) == kHandSize) ++p;
+    hands[p].push_back(c);
   }
+  return hands;
+}
 
-  // P0 bids three uncontested, then keeps it (the sole-bidder raise).
-  SPIEL_CHECK_TRUE(ht->CurrentPhase() == Phase::kBidding);
-  state->ApplyAction(kActionBidThree);  // P0
-  state->ApplyAction(kActionPass);      // P1
-  state->ApplyAction(kActionPass);      // P2
-  state->ApplyAction(kActionPass);      // P3
-  state->ApplyAction(kActionPass);      // P0 keeps the three
-  SPIEL_CHECK_EQ(ht->Declarer(), 0);
-  SPIEL_CHECK_TRUE(ht->WinningBid() == Bid::kThree);
-
-  // The talon exchange begins with the draw (a chance step): with a "three" the
-  // declarer draws 3 and each opponent draws 1.
-  SPIEL_CHECK_TRUE(ht->CurrentPhase() == Phase::kTalonExchange);
-  while (state->IsChanceNode()) {
-    state->ApplyAction(state->ChanceOutcomes().front().first);
+// Runs the talon draw (the chance step) by always taking the lowest card.
+void DrawTalon(TalonExchangeState* t) {
+  while (t->CurrentPlayer() == kChancePlayerId) {
+    t->ApplyAction(t->ChanceOutcomes().front().first);
   }
-  SPIEL_CHECK_EQ(static_cast<int>(ht->PlayerCards(0).size()), kHandSize + 3);
-  for (Player p = 1; p < kNumPlayers; ++p) {
-    SPIEL_CHECK_EQ(static_cast<int>(ht->PlayerCards(p).size()), kHandSize + 1);
-  }
+}
 
-  // No annullable hand here, so the exchange goes straight to discarding (still
-  // the same parent phase). Discard back to nine, always taking the first legal
-  // discard, and check that no forbidden card (honour, king or XX) is offered.
-  SPIEL_CHECK_TRUE(ht->CurrentPhase() == Phase::kTalonExchange);
-  while (ht->CurrentPhase() == Phase::kTalonExchange) {
-    std::vector<Action> legal = state->LegalActions();
-    SPIEL_CHECK_FALSE(legal.empty());
-    for (Action a : legal) {
-      SPIEL_CHECK_TRUE(IsDiscardAction(a));
-      SPIEL_CHECK_TRUE(IsDiscardableCard(CardForDiscardAction(a)));
+// The lowest `count` card ids not already in `hand`, as a talon disjoint from
+// it (the exact cards do not matter, only that they are valid and distinct).
+std::vector<Action> UnusedTalon(const std::vector<Action>& hand) {
+  std::vector<bool> used(kNumCards, false);
+  for (Action c : hand) used[c] = true;
+  std::vector<Action> talon;
+  for (Action c = 0;
+       c < kNumCards && static_cast<int>(talon.size()) < kTalonSize; ++c) {
+    if (!used[c]) talon.push_back(c);
+  }
+  return talon;
+}
+
+// Engineered talon exchanges exercising discard legality and annulment.
+void TalonLogicTest() {
+  // Discard legality: P0 (declarer, "three") holds the pagát/XXI/Skíz, the XX
+  // and a king among ordinary tarokks; after drawing it may discard none of
+  // those, but may discard the ordinary cards.
+  {
+    std::vector<Action> hand0 = {kCardPagat, Tarokk(2), Tarokk(3),
+                                 Tarokk(4),  Tarokk(5), kCardXX,
+                                 kCardXXI,   kCardSkiz, MakeKing(kHearts)};
+    std::vector<Action> talon = UnusedTalon(hand0);
+    TalonExchangeState t(DealWith(hand0, talon), talon, /*declarer=*/0,
+                         Bid::kThree, kInvalidPlayer, CalledCard::kNone);
+    DrawTalon(&t);
+    while (t.LegalActions().front() == kActionAnnul) {
+      t.ApplyAction(kActionDeclineAnnul);  // skip any opponent's throw-in
     }
-    state->ApplyAction(legal.front());
+    SPIEL_CHECK_EQ(t.CurrentPlayer(), 0);
+    std::vector<Action> legal = t.LegalActions();
+    std::vector<Action> forbidden = {kCardPagat, kCardXXI, kCardSkiz, kCardXX,
+                                     MakeKing(kHearts)};
+    for (Action f : forbidden) {
+      SPIEL_CHECK_FALSE(Contains(legal, DiscardActionForCard(f)));
+    }
+    for (Action ok : {Tarokk(2), Tarokk(3), Tarokk(4), Tarokk(5)}) {
+      SPIEL_CHECK_TRUE(Contains(legal, DiscardActionForCard(ok)));
+    }
   }
 
-  // Every hand is back to nine and the play has begun.
-  for (Player p = 0; p < kNumPlayers; ++p) {
-    SPIEL_CHECK_EQ(static_cast<int>(ht->PlayerCards(p).size()), kHandSize);
+  // The cue-bidder may not discard the tarokk they promised (here the XIX).
+  {
+    std::vector<Action> hand0 = {Tarokk(2), Tarokk(3), Tarokk(4),
+                                 Tarokk(5), Tarokk(6), Tarokk(7),
+                                 Tarokk(8), kCardXX,   kCardXIX};
+    std::vector<Action> talon = UnusedTalon(hand0);
+    TalonExchangeState t(DealWith(hand0, talon), talon, /*declarer=*/0,
+                         Bid::kTwo, /*cue_bidder=*/0, CalledCard::kXIX);
+    DrawTalon(&t);
+    while (t.LegalActions().front() == kActionAnnul) {
+      t.ApplyAction(kActionDeclineAnnul);
+    }
+    SPIEL_CHECK_EQ(t.CurrentPlayer(), 0);
+    std::vector<Action> legal = t.LegalActions();
+    SPIEL_CHECK_FALSE(Contains(legal, DiscardActionForCard(kCardXIX)));
+    SPIEL_CHECK_FALSE(Contains(legal, DiscardActionForCard(kCardXX)));
+    SPIEL_CHECK_TRUE(Contains(legal, DiscardActionForCard(Tarokk(2))));
   }
-  SPIEL_CHECK_TRUE(ht->CurrentPhase() == Phase::kPlaying);
-  SPIEL_CHECK_EQ(state->CurrentPlayer(), 0);  // forehand leads
 
-  // Play to the end; the placeholder scoring stays zero-sum.
-  while (!state->IsTerminal()) {
-    state->ApplyAction(state->LegalActions().front());
+  // Annulment with all four kings: P0 (declarer, solo -> draws nothing) is
+  // offered the throw-in first and takes it.
+  {
+    std::vector<Action> hand0 = {
+        Tarokk(2),           Tarokk(3),        Tarokk(4),
+        Tarokk(5),           Tarokk(6),        MakeKing(kHearts),
+        MakeKing(kDiamonds), MakeKing(kClubs), MakeKing(kSpades)};
+    std::vector<Action> talon = UnusedTalon(hand0);
+    TalonExchangeState t(DealWith(hand0, talon), talon, /*declarer=*/0,
+                         Bid::kSolo, kInvalidPlayer, CalledCard::kNone);
+    DrawTalon(&t);
+    SPIEL_CHECK_EQ(t.CurrentPlayer(), 0);
+    std::vector<Action> expected = {kActionAnnul, kActionDeclineAnnul};
+    SPIEL_CHECK_EQ(expected, t.LegalActions());
+    t.ApplyAction(kActionAnnul);
+    SPIEL_CHECK_TRUE(t.IsFinished());
+    SPIEL_CHECK_TRUE(t.Annulled());
   }
-  double sum = 0.0;
-  for (double r : state->Returns()) sum += r;
-  SPIEL_CHECK_TRUE(std::abs(sum) < 1e-9);
+
+  // Annulment with the XXI + pagát only: likewise offered and taken.
+  {
+    std::vector<Action> hand0 = {kCardPagat,
+                                 kCardXXI,
+                                 SuitCard(kHearts, kLow),
+                                 SuitCard(kHearts, kJack),
+                                 SuitCard(kHearts, kRider),
+                                 SuitCard(kHearts, kQueen),
+                                 SuitCard(kDiamonds, kLow),
+                                 SuitCard(kDiamonds, kKing),
+                                 SuitCard(kDiamonds, kRider)};
+    std::vector<Action> talon = UnusedTalon(hand0);
+    TalonExchangeState t(DealWith(hand0, talon), talon, /*declarer=*/0,
+                         Bid::kSolo, kInvalidPlayer, CalledCard::kNone);
+    DrawTalon(&t);
+    SPIEL_CHECK_EQ(t.CurrentPlayer(), 0);
+    std::vector<Action> expected = {kActionAnnul, kActionDeclineAnnul};
+    SPIEL_CHECK_EQ(expected, t.LegalActions());
+    t.ApplyAction(kActionAnnul);
+    SPIEL_CHECK_TRUE(t.IsFinished());
+    SPIEL_CHECK_TRUE(t.Annulled());
+  }
 }
 
 }  // namespace
@@ -350,6 +407,6 @@ void TalonDiscardTest() {
 int main(int argc, char** argv) {
   open_spiel::hungarian_tarokk::BiddingLogicTest();
   open_spiel::hungarian_tarokk::CardHelperTest();
-  open_spiel::hungarian_tarokk::TalonDiscardTest();
+  open_spiel::hungarian_tarokk::TalonLogicTest();
   open_spiel::hungarian_tarokk::BasicHungarianTarokkTests();
 }

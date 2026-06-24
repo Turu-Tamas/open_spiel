@@ -41,6 +41,15 @@ inline constexpr Action kCardXX = 19;
 inline constexpr Action kCardXXI = 20;
 inline constexpr Action kCardSkiz = 21;
 
+enum Suit { kHearts = 0, kDiamonds = 1, kClubs = 2, kSpades = 3 };
+enum SuitRank { kLow = 0, kJack = 1, kRider = 2, kQueen = 3, kKing = 4 };
+
+inline constexpr Action SuitCard(Suit suit, SuitRank rank) {
+  return kNumTarokks + suit * kCardsPerSuit + rank;
+}
+inline constexpr Action MakeKing(Suit suit) { return SuitCard(suit, kKing); }
+inline constexpr Action Tarokk(int numeral) { return numeral - 1; }
+
 // A fresh, sorted 42-card deck (action ids 0..41).
 std::vector<Action> NewSortedDeck();
 
