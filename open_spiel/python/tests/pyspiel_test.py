@@ -83,6 +83,7 @@ EXPECTED_MANDATORY_GAMES = frozenset([
     "hex",
     "hearts",
     "hive",
+    "hungarian_tarokk",
     "kriegspiel",
     "kuhn_poker",
     "laser_tag",

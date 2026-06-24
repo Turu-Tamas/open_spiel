@@ -1,0 +1,312 @@
+// Copyright 2019 DeepMind Technologies Limited
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "open_spiel/games/hungarian_tarokk/hungarian_tarokk.h"
+
+#include <algorithm>
+#include <array>
+#include <memory>
+#include <numeric>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "open_spiel/abseil-cpp/absl/strings/str_cat.h"
+#include "open_spiel/abseil-cpp/absl/strings/str_join.h"
+#include "open_spiel/game_parameters.h"
+#include "open_spiel/spiel.h"
+#include "open_spiel/spiel_globals.h"
+#include "open_spiel/spiel_utils.h"
+
+namespace open_spiel {
+namespace hungarian_tarokk {
+namespace {
+
+// Facts about the game.
+const GameType kGameType{
+    /*short_name=*/"hungarian_tarokk",
+    /*long_name=*/"Hungarian Tarokk",
+    GameType::Dynamics::kSequential,
+    GameType::ChanceMode::kExplicitStochastic,
+    GameType::Information::kImperfectInformation,
+    GameType::Utility::kZeroSum,
+    GameType::RewardModel::kTerminal,
+    /*max_num_players=*/kNumPlayers,
+    /*min_num_players=*/kNumPlayers,
+    /*provides_information_state_string=*/true,
+    /*provides_information_state_tensor=*/false,
+    /*provides_observation_string=*/true,
+    /*provides_observation_tensor=*/false,
+    /*parameter_specification=*/{}  // no parameters
+};
+
+std::shared_ptr<const Game> Factory(const GameParameters& params) {
+  return std::shared_ptr<const Game>(new HungarianTarokkGame(params));
+}
+
+REGISTER_SPIEL_GAME(kGameType, Factory);
+
+std::string PhaseToString(Phase phase) {
+  switch (phase) {
+    case Phase::kDealing:
+      return "Dealing";
+    case Phase::kBidding:
+      return "Bidding";
+    case Phase::kPlaying:
+      return "Playing";
+    case Phase::kFinished:
+      return "Finished";
+  }
+  SpielFatalError("Unknown phase.");
+}
+
+// The bidding action ids live immediately after the card action ids.
+static_assert(kBiddingActionBase == kNumCards,
+              "Bidding action ids must start right after the card action ids.");
+
+}  // namespace
+
+HungarianTarokkState::HungarianTarokkState(std::shared_ptr<const Game> game)
+    : State(game), deck_(NewSortedDeck()), players_cards_(kNumPlayers) {
+  collected_points_.fill(0);
+}
+
+Player HungarianTarokkState::CurrentPlayer() const {
+  if (phase_ == Phase::kFinished) return kTerminalPlayerId;
+  if (phase_ == Phase::kDealing) return kChancePlayerId;
+  if (phase_ == Phase::kBidding) return bidding_.CurrentPlayer();
+  return current_player_;
+}
+
+bool HungarianTarokkState::IsTerminal() const {
+  return phase_ == Phase::kFinished;
+}
+
+ActionsAndProbs HungarianTarokkState::ChanceOutcomes() const {
+  SPIEL_CHECK_TRUE(phase_ == Phase::kDealing);
+  ActionsAndProbs outcomes;
+  outcomes.reserve(deck_.size());
+  const double p = 1.0 / static_cast<double>(deck_.size());
+  for (Action card : deck_) outcomes.push_back({card, p});
+  return outcomes;
+}
+
+std::vector<Action> HungarianTarokkState::LegalActions() const {
+  if (phase_ == Phase::kFinished) return {};
+  if (phase_ == Phase::kDealing) return deck_;  // already sorted
+  if (phase_ == Phase::kBidding) return bidding_.LegalActions();
+  return LegalPlayActions();
+}
+
+std::vector<Action> HungarianTarokkState::LegalPlayActions() const {
+  const std::vector<Action>& hand = players_cards_[current_player_];
+  std::vector<Action> legal;
+  if (trick_cards_.empty()) {
+    // Leading: any card may be played.
+    legal = hand;
+  } else {
+    int led_suit = CardSuit(trick_cards_.front());
+    // Must follow the led suit if possible.
+    for (Action c : hand) {
+      if (CardSuit(c) == led_suit) legal.push_back(c);
+    }
+    if (legal.empty()) {
+      // Otherwise must play a tarokk if holding one.
+      for (Action c : hand) {
+        if (IsTarokk(c)) legal.push_back(c);
+      }
+    }
+    // Otherwise (no led suit, no tarokk) anything goes.
+    if (legal.empty()) legal = hand;
+  }
+  std::sort(legal.begin(), legal.end());
+  return legal;
+}
+
+void HungarianTarokkState::DoApplyAction(Action action_id) {
+  if (phase_ == Phase::kDealing) {
+    auto it = std::find(deck_.begin(), deck_.end(), action_id);
+    SPIEL_CHECK_TRUE(it != deck_.end());
+    deck_.erase(it);
+    Player target = cards_dealt_ % kNumPlayers;
+    players_cards_[target].push_back(action_id);
+    ++cards_dealt_;
+    if (cards_dealt_ == kCardsDealtToPlayers) {
+      // The remaining six cards form the (currently unused) talon.
+      talon_ = deck_;
+      deck_.clear();
+      for (std::vector<Action>& hand : players_cards_) {
+        std::sort(hand.begin(), hand.end());
+      }
+      // Start the auction. The forehand (player 0, to the dealer's right) bids
+      // first; the bidding needs to know each player's relevant holdings to
+      // enforce the entry requirement and the cue-bid / yield conventions.
+      std::vector<PlayerBidInfo> info(kNumPlayers);
+      for (int p = 0; p < kNumPlayers; ++p) {
+        const std::vector<Action>& hand = players_cards_[p];
+        info[p].has_honour = HandHasHonour(hand);
+        info[p].has_high_honour = HandHasHighHonour(hand);
+        info[p].has_xx = HandHasCard(hand, kCardXX);
+        info[p].has_xix = HandHasCard(hand, kCardXIX);
+        info[p].has_xviii = HandHasCard(hand, kCardXVIII);
+      }
+      bidding_ = BiddingState(info);
+      phase_ = Phase::kBidding;
+    }
+    return;
+  }
+
+  if (phase_ == Phase::kBidding) {
+    bidding_.ApplyAction(action_id);
+    if (bidding_.IsFinished()) {
+      if (bidding_.PassedOut()) {
+        // Nobody bid: the hand is thrown in with no score.
+        phase_ = Phase::kFinished;
+      } else {
+        declarer_ = bidding_.Declarer();
+        winning_bid_ = bidding_.WinningBid();
+        // (Talon exchange and partner-calling are not modelled yet; go straight
+        // to the play, where the forehand leads.)
+        phase_ = Phase::kPlaying;
+        trick_leader_ = 0;
+        current_player_ = 0;
+      }
+    }
+    return;
+  }
+
+  // Playing phase.
+  std::vector<Action>& hand = players_cards_[current_player_];
+  auto it = std::find(hand.begin(), hand.end(), action_id);
+  SPIEL_CHECK_TRUE(it != hand.end());
+  hand.erase(it);
+  trick_cards_.push_back(action_id);
+  if (trick_cards_.size() < kNumPlayers) {
+    current_player_ = (current_player_ + 1) % kNumPlayers;
+  } else {
+    ResolveTrick();
+  }
+}
+
+void HungarianTarokkState::ResolveTrick() {
+  int led_suit = CardSuit(trick_cards_.front());
+  int best_index = 0;
+  for (int i = 1; i < static_cast<int>(trick_cards_.size()); ++i) {
+    if (CardBeats(trick_cards_[best_index], trick_cards_[i], led_suit)) {
+      best_index = i;
+    }
+  }
+  Player winner = (trick_leader_ + best_index) % kNumPlayers;
+  for (Action c : trick_cards_) collected_points_[winner] += CardPoints(c);
+  completed_tricks_.push_back(trick_cards_);
+  trick_cards_.clear();
+  ++tricks_played_;
+  if (tricks_played_ == kNumTricks) {
+    phase_ = Phase::kFinished;
+    current_player_ = kTerminalPlayerId;
+  } else {
+    trick_leader_ = winner;
+    current_player_ = winner;
+  }
+}
+
+std::vector<double> HungarianTarokkState::Returns() const {
+  if (phase_ != Phase::kFinished) {
+    return std::vector<double>(kNumPlayers, 0.0);
+  }
+  int total =
+      std::accumulate(collected_points_.begin(), collected_points_.end(), 0);
+  double mean = static_cast<double>(total) / kNumPlayers;
+  std::vector<double> returns(kNumPlayers);
+  for (int p = 0; p < kNumPlayers; ++p) {
+    returns[p] = static_cast<double>(collected_points_[p]) - mean;
+  }
+  return returns;
+}
+
+std::string HungarianTarokkState::PublicLogString() const {
+  std::vector<std::string> tricks;
+  tricks.reserve(completed_tricks_.size());
+  for (const std::vector<Action>& t : completed_tricks_) {
+    tricks.push_back(CardsToString(t));
+  }
+  return absl::StrJoin(tricks, " / ");
+}
+
+std::string HungarianTarokkState::ActionToString(Player player,
+                                                 Action action_id) const {
+  if (player == kChancePlayerId) {
+    return absl::StrCat("Deal ", CardToString(action_id));
+  }
+  if (IsBiddingAction(action_id)) return BiddingActionToString(action_id);
+  return CardToString(action_id);
+}
+
+std::string HungarianTarokkState::ToString() const {
+  std::string str = absl::StrCat("Phase: ", PhaseToString(phase_), "\n");
+  for (int p = 0; p < kNumPlayers; ++p) {
+    absl::StrAppend(&str, "P", p, " hand: ", CardsToString(players_cards_[p]),
+                    "\n");
+  }
+  if (!talon_.empty()) {
+    absl::StrAppend(&str, "Talon: ", CardsToString(talon_), "\n");
+  }
+  if (phase_ != Phase::kDealing) {
+    absl::StrAppend(&str, "Bidding: ", bidding_.ToString(), "\n");
+  }
+  absl::StrAppend(&str, "Tricks: ", PublicLogString(), "\n");
+  if (!trick_cards_.empty()) {
+    absl::StrAppend(&str, "Current trick: ", CardsToString(trick_cards_), "\n");
+  }
+  absl::StrAppend(&str, "Points: ", absl::StrJoin(collected_points_, ","), "\n");
+  return str;
+}
+
+std::string HungarianTarokkState::InformationStateString(Player player) const {
+  SPIEL_CHECK_GE(player, 0);
+  SPIEL_CHECK_LT(player, kNumPlayers);
+  // The player's private knowledge: their own current hand plus everything that
+  // is public (the bidding and the cards played).
+  std::string str = absl::StrCat("P", player, " hand: ",
+                                 CardsToString(players_cards_[player]),
+                                 " | bidding: ", bidding_.ToString(),
+                                 " | history: ", PublicLogString());
+  if (!trick_cards_.empty()) {
+    absl::StrAppend(&str, " | trick: ", CardsToString(trick_cards_));
+  }
+  return str;
+}
+
+std::string HungarianTarokkState::ObservationString(Player player) const {
+  SPIEL_CHECK_GE(player, 0);
+  SPIEL_CHECK_LT(player, kNumPlayers);
+  std::string str = absl::StrCat("P", player, " hand: ",
+                                 CardsToString(players_cards_[player]),
+                                 " | bidding: ", bidding_.ToString());
+  if (!trick_cards_.empty()) {
+    absl::StrAppend(&str, " | trick: ", CardsToString(trick_cards_));
+  }
+  absl::StrAppend(&str, " | points: ", absl::StrJoin(collected_points_, ","));
+  return str;
+}
+
+std::unique_ptr<State> HungarianTarokkState::Clone() const {
+  return std::unique_ptr<State>(new HungarianTarokkState(*this));
+}
+
+HungarianTarokkGame::HungarianTarokkGame(const GameParameters& params)
+    : Game(kGameType, params) {}
+
+}  // namespace hungarian_tarokk
+}  // namespace open_spiel

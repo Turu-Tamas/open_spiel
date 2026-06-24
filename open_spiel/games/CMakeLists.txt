@@ -122,6 +122,12 @@ set(GAME_SOURCES
   hive/hive.h
   hive/hive_board.cc
   hive/hive_board.h
+  hungarian_tarokk/hungarian_tarokk.cc
+  hungarian_tarokk/hungarian_tarokk.h
+  hungarian_tarokk/bidding.cc
+  hungarian_tarokk/bidding.h
+  hungarian_tarokk/cards.cc
+  hungarian_tarokk/cards.h
   kriegspiel/kriegspiel.cc
   kriegspiel/kriegspiel.h
   kuhn_poker/kuhn_poker.cc
@@ -557,6 +563,10 @@ add_test(hex_test hex_test)
 add_executable(hive_test hive/hive_test.cc ${OPEN_SPIEL_OBJECTS}
                $<TARGET_OBJECTS:tests>)
 add_test(hive_test hive_test)
+
+add_executable(hungarian_tarokk_test hungarian_tarokk/hungarian_tarokk_test.cc
+               ${OPEN_SPIEL_OBJECTS} $<TARGET_OBJECTS:tests>)
+add_test(hungarian_tarokk_test hungarian_tarokk_test)
 
 add_executable(kriegspiel_test kriegspiel/kriegspiel_test.cc ${OPEN_SPIEL_OBJECTS}
         $<TARGET_OBJECTS:tests>)
