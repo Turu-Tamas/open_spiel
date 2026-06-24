@@ -1,17 +1,3 @@
-// Copyright 2019 DeepMind Technologies Limited
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #include "open_spiel/games/hungarian_tarokk/cards.h"
 
 #include <numeric>
@@ -32,9 +18,9 @@ const char* const kSuitNames[kNumSuits] = {"Hearts", "Diamonds", "Clubs",
 
 std::string RomanNumeral(int n) {
   static const char* const kRomans[] = {
-      "0",   "I",   "II",   "III",   "IV",  "V",   "VI",  "VII",
-      "VIII", "IX", "X",    "XI",    "XII", "XIII", "XIV", "XV",
-      "XVI", "XVII", "XVIII", "XIX", "XX",  "XXI"};
+      "0",    "I",    "II",    "III", "IV",  "V",    "VI",  "VII",
+      "VIII", "IX",   "X",     "XI",  "XII", "XIII", "XIV", "XV",
+      "XVI",  "XVII", "XVIII", "XIX", "XX",  "XXI"};
   SPIEL_CHECK_GE(n, 1);
   SPIEL_CHECK_LE(n, 21);
   return kRomans[n];
@@ -61,7 +47,7 @@ int CardPoints(Action card) {
   if (IsTarokk(card)) {
     // Honours: pagát (0), XXI (20) and Skíz (21) are worth 5; the other
     // tarokks (II..XX) are worth 1.
-    if (card == 0 || card == 20 || card == 21) return 5;
+    if (card == kCardPagat || card == kCardXXI || card == kCardSkiz) return 5;
     return 1;
   }
   // Suit cards: ace/ten 1, jack 2, rider 3, queen 4, king 5.
@@ -99,7 +85,7 @@ bool CardBeats(Action best, Action candidate, int led_suit) {
 std::string CardToString(Action card) {
   if (IsTarokk(card)) {
     if (card == 21) return "Skiz";
-    return RomanNumeral(card + 1);  // id 0 -> "I", id 20 -> "XXI".
+    return RomanNumeral(card + 1);
   }
   static const char* const kRankNames[kCardsPerSuit] = {"Low", "Jack", "Rider",
                                                         "Queen", "King"};

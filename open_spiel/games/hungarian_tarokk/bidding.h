@@ -1,83 +1,36 @@
-// Copyright 2019 DeepMind Technologies Limited
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #ifndef OPEN_SPIEL_GAMES_HUNGARIAN_TAROKK_BIDDING_H_
 #define OPEN_SPIEL_GAMES_HUNGARIAN_TAROKK_BIDDING_H_
 
+#include <array>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "open_spiel/abseil-cpp/absl/types/optional.h"
 #include "open_spiel/spiel.h"
-
-// The bidding (auction) phase of Hungarian Tarokk, see rules.md §3.
-//
-// This file is self-contained: it depends only on the core OpenSpiel types and
-// NOT on cards.h / hungarian_tarokk.h. The relevant facts about each player's
-// hand are passed in via PlayerBidInfo, and any tarokk the auction obliges the
-// declarer to call is reported abstractly as a CalledCard, so the file never
-// needs to know concrete card ids.
-//
-// Implemented (rules.md §3.1 - §3.5):
-//   * the four bids three / two / one / solo, plus pass and hold (tartom);
-//   * the honour entry requirement -- a player with no honour must pass (§3.1);
-//   * bids strictly higher than the standing bid, except a hold matching it,
-//     each standing bid held at most once (§3.1);
-//   * conventional cue bids / invitations (§3.3): a single jump above the
-//     minimum available bid promises the XIX, a double jump promises the XVIII;
-//     such a bid is legal only if the player holds the promised card, there is
-//     at most one cue bid per auction, the 4th seat after three passes never cue
-//     bids, and an opening solo (a triple jump) is not a cue bid;
-//   * the yielded game (§3.4): in the Three-Two-pass-pass position a pass by the
-//     three-bidder is a yield promising the XX plus a high honour (so it is only
-//     legal then), and obliges the declarer to call the XX;
-//   * the 4th-seat trial bid (§3.5): after three passes the fourth player may
-//     bid three even without an honour;
-//   * the sole-bidder raise (§3.2): a player left in an uncontested plain three
-//     may raise the contract (to two / one / solo) before play.
-//
-// Left for later: enforcing the downstream consequences of the conventions
-// (calling the promised partner card, the pagát-ultimó obligation of a pagát cue
-// bid, and the trial bid's talon-honour penalty) -- those belong to the talon /
-// announcement phases, which are not modelled yet. The auction records what it
-// determined (declarer, contract, and ObligatoryCalledCard()) for later use.
 
 namespace open_spiel {
 namespace hungarian_tarokk {
 
-// Bids ordered from lowest (kThree) to highest (kSolo). The position in this
-// enum is the bid's *rank*, which is what the auction compares; lower rank =
-// weaker bid = more talon cards exchanged.
-enum class Bid { kThree = 0, kTwo = 1, kOne = 2, kSolo = 3 };
+enum class Bid { kThree, kTwo, kOne, kSolo };
 inline constexpr int kNumBids = 4;
+inline constexpr Bid kWeakestBid = Bid::kThree;
+inline constexpr Bid kStrongestBid = Bid::kSolo;
+inline constexpr std::array<Bid, kNumBids> kAllBids = {Bid::kThree, Bid::kTwo,
+                                                       Bid::kOne, Bid::kSolo};
 
-// Number of talon cards the declarer exchanges (three->3 ... solo->0).
+bool BidStronger(Bid a, Bid b);
 int BidTalonExchange(Bid bid);
-// Base payment for the game (three->1 ... solo->4).
 int BidGameValue(Bid bid);
 std::string BidToString(Bid bid);
 
-// The tarokk that a cue bid or a yield obliges the declarer to call. kNone means
-// no obligation, in which case the declarer calls the XX by default (decided in
-// the announcement phase, which is not modelled yet).
+// The tarokk that a cue bid or a yield obliges the declarer to call.
 enum class CalledCard { kNone, kXIX, kXVIII, kXX };
 std::string CalledCardToString(CalledCard card);
 
-// The facts about a player's nine-card hand that the auction needs.
 struct PlayerBidInfo {
-  bool has_honour = false;       // holds the pagát, the XXI or the Skíz
-  bool has_high_honour = false;  // holds the XXI or the Skíz
+  bool has_honour = false;       // pagát, XXI or the Skíz
+  bool has_high_honour = false;  // XXI or the Skíz
   bool has_xx = false;
   bool has_xix = false;
   bool has_xviii = false;
@@ -87,19 +40,21 @@ struct PlayerBidInfo {
 // actions; hungarian_tarokk.cc static_asserts that kBiddingActionBase equals
 // the game's kNumCards so the two action ranges never overlap.
 inline constexpr Action kBiddingActionBase = 42;
-inline constexpr Action kActionPass = kBiddingActionBase + 0;      // 42
-inline constexpr Action kActionBidThree = kBiddingActionBase + 1;  // 43
-inline constexpr Action kActionBidTwo = kBiddingActionBase + 2;    // 44
-inline constexpr Action kActionBidOne = kBiddingActionBase + 3;    // 45
-inline constexpr Action kActionBidSolo = kBiddingActionBase + 4;   // 46
-inline constexpr Action kActionHold = kBiddingActionBase + 5;      // 47
+inline constexpr Action kActionPass = kBiddingActionBase + 0;
+inline constexpr Action kActionBidThree = kBiddingActionBase + 1;
+inline constexpr Action kActionBidTwo = kBiddingActionBase + 2;
+inline constexpr Action kActionBidOne = kBiddingActionBase + 3;
+inline constexpr Action kActionBidSolo = kBiddingActionBase + 4;
+inline constexpr Action kActionHold = kBiddingActionBase + 5;
 inline constexpr int kNumBiddingActions = 6;
 
-bool IsBiddingAction(Action action);
+Action BidToAction(Bid bid);
+Bid ActionToBid(Action action);
+bool IsBidAction(Action action);  // one of the four kActionBid* values
+
+bool IsBiddingAction(Action action);  // any auction action (bid, pass or hold)
 std::string BiddingActionToString(Action action);
 
-// A self-contained, value-semantic auction. Copyable (so the owning game state
-// can be cloned cheaply). The forehand (player 0) always bids first.
 class BiddingState {
  public:
   BiddingState() = default;
@@ -128,26 +83,28 @@ class BiddingState {
  private:
   int NumPlayers() const { return static_cast<int>(info_.size()); }
   int NumActive() const;  // players who have not passed
-  bool HasBid(Player p) const { return bid_rank_[p] >= 0; }
+  bool HasBid(Player p) const { return player_bid_[p].has_value(); }
   bool CanHold(Player p) const;
   bool IsFourthAfterThreePasses() const;
   bool IsYieldPosition() const;
-  // If a bid of `rank` by player `p` would be a cue bid (given the current
-  // auction state), returns the promised card, otherwise kNone.
-  CalledCard CueForBid(Player p, int rank) const;
+  // If `bid` by player `p` would be a cue bid (given the current auction
+  // state), returns the promised card, otherwise kNone.
+  CalledCard CueForBid(Player p, Bid bid) const;
 
   void ApplyBiddingAction(Action action);
   void ApplySoleRaise(Action action);
   void AdvanceOrFinish();
-  void Finish(Player winner, int rank);
+  void Finish(Player winner, Bid bid);
 
   std::vector<PlayerBidInfo> info_;
   Player current_player_ = kInvalidPlayer;
   std::vector<bool> passed_;
-  std::vector<int> bid_rank_;   // highest bid each player has made (-1 = none)
-  int current_bid_rank_ = -1;   // -1 = no bid has been made yet
+  // The highest bid each player has made (nullopt = they have not bid).
+  std::vector<absl::optional<Bid>> player_bid_;
+  // The standing bid (nullopt = no bid has been made yet).
+  absl::optional<Bid> current_bid_;
   Player current_bidder_ = kInvalidPlayer;
-  bool last_was_hold_ = false;  // the last positive call was a hold
+  bool last_was_hold_ = false;
   bool awaiting_sole_raise_ = false;
 
   Player cue_bidder_ = kInvalidPlayer;

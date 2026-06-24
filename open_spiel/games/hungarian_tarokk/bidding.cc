@@ -1,17 +1,3 @@
-// Copyright 2019 DeepMind Technologies Limited
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #include "open_spiel/games/hungarian_tarokk/bidding.h"
 
 #include <algorithm>
@@ -21,20 +7,26 @@
 
 #include "open_spiel/abseil-cpp/absl/strings/str_cat.h"
 #include "open_spiel/abseil-cpp/absl/strings/str_join.h"
+#include "open_spiel/abseil-cpp/absl/types/optional.h"
 #include "open_spiel/spiel.h"
 #include "open_spiel/spiel_utils.h"
 
 namespace open_spiel {
 namespace hungarian_tarokk {
 
+// Weak-to-strong index of a bid (kThree -> 0 ... kSolo -> 3).
+int BidStrength(Bid bid) { return static_cast<int>(bid); }
+
+bool BidStronger(Bid a, Bid b) { return BidStrength(a) > BidStrength(b); }
+
 int BidTalonExchange(Bid bid) {
-  // three -> 3, two -> 2, one -> 1, solo -> 0.
-  return kNumBids - 1 - static_cast<int>(bid);
+  // three -> 3, two -> 2, one -> 1, solo -> 0 (the strongest bid draws fewest).
+  return kNumBids - 1 - BidStrength(bid);
 }
 
 int BidGameValue(Bid bid) {
   // three -> 1, two -> 2, one -> 3, solo -> 4.
-  return static_cast<int>(bid) + 1;
+  return BidStrength(bid) + 1;
 }
 
 std::string BidToString(Bid bid) {
@@ -65,6 +57,17 @@ std::string CalledCardToString(CalledCard card) {
   SpielFatalError("Unknown called card.");
 }
 
+Action BidToAction(Bid bid) { return kActionBidThree + BidStrength(bid); }
+
+Bid ActionToBid(Action action) {
+  SPIEL_CHECK_TRUE(IsBidAction(action));
+  return static_cast<Bid>(action - kActionBidThree);
+}
+
+bool IsBidAction(Action action) {
+  return action >= kActionBidThree && action <= kActionBidSolo;
+}
+
 bool IsBiddingAction(Action action) {
   return action >= kBiddingActionBase &&
          action < kBiddingActionBase + kNumBiddingActions;
@@ -92,7 +95,7 @@ BiddingState::BiddingState(const std::vector<PlayerBidInfo>& info)
     : info_(info),
       current_player_(0),
       passed_(info.size(), false),
-      bid_rank_(info.size(), -1) {}
+      player_bid_(info.size()) {}
 
 int BiddingState::NumActive() const {
   int n = 0;
@@ -103,41 +106,52 @@ int BiddingState::NumActive() const {
 }
 
 bool BiddingState::CanHold(Player p) const {
-  return current_bid_rank_ >= 0 && HasBid(p) && !last_was_hold_ &&
+  return current_bid_.has_value() && HasBid(p) && !last_was_hold_ &&
          p != current_bidder_;
 }
 
 bool BiddingState::IsFourthAfterThreePasses() const {
   // No bid has been made and only the current player is still in -- i.e. the
   // first three seats all passed and the fourth seat is to act.
-  return current_bid_rank_ == -1 && NumActive() == 1 &&
+  return !current_bid_.has_value() && NumActive() == 1 &&
          !passed_[current_player_];
 }
 
 bool BiddingState::IsYieldPosition() const {
   // The standing bid is a two, only the three-bidder and the two-bidder remain,
   // and it is the three-bidder's turn.
-  return current_bid_rank_ == 1 && NumActive() == 2 &&
-         bid_rank_[current_player_] == 0 && current_bidder_ != current_player_;
+  return current_bid_ == Bid::kTwo && NumActive() == 2 &&
+         player_bid_[current_player_] == Bid::kThree &&
+         current_bidder_ != current_player_;
 }
 
-CalledCard BiddingState::CueForBid(Player p, int rank) const {
+CalledCard BiddingState::CueForBid(Player p, Bid bid) const {
   if (cue_bidder_ != kInvalidPlayer) return CalledCard::kNone;  // one cue only
   if (IsFourthAfterThreePasses()) return CalledCard::kNone;     // never a cue
-  // The minimum way to stay in is to hold the standing bid if the player can,
-  // otherwise to make the lowest legal overbid. A jump is measured from there.
-  int reference = CanHold(p) ? current_bid_rank_ : (current_bid_rank_ + 1);
-  int jump = rank - reference;
-  SPIEL_CHECK_LE(jump, 2); // a greater jump is not possible
-  if (jump == 0) return CalledCard::kNone;  // lowest legal overbid
+  // The "floor" is the weakest bid the player could make to stay in: the
+  // standing bid itself if they may hold it, otherwise the next bid up; with no
+  // standing bid yet it is the weakest bid. A jump is measured from there --
+  // one level up cues the XIX, two levels up cues the XVIII. Anything else (a
+  // non-jump, or an opening solo (the only wider jump possible)) carries no
+  // cue.
+  int floor_strength;
+  if (!current_bid_.has_value()) {
+    floor_strength = BidStrength(kWeakestBid);
+  } else if (CanHold(p)) {
+    floor_strength = BidStrength(*current_bid_);
+  } else {
+    floor_strength = BidStrength(*current_bid_) + 1;
+  }
+  int jump = BidStrength(bid) - floor_strength;
   if (jump == 1) return CalledCard::kXIX;
   if (jump == 2) return CalledCard::kXVIII;
+  return CalledCard::kNone;
 }
 
 std::vector<Action> BiddingState::LegalActions() const {
   SPIEL_CHECK_FALSE(finished_);
   if (awaiting_sole_raise_) {
-    // Keep the three (pass) or raise to two / one / solo.
+    // Keep the three (pass) or raise to a more valuable game.
     return {kActionPass, kActionBidTwo, kActionBidOne, kActionBidSolo};
   }
 
@@ -157,9 +171,9 @@ std::vector<Action> BiddingState::LegalActions() const {
   if (IsFourthAfterThreePasses()) {
     // The fourth seat after three passes: bids are never cue bids.
     if (info_[p].has_honour) {
-      for (int r = 0; r < kNumBids; ++r) legal.push_back(kActionBidThree + r);
+      for (Bid bid : kAllBids) legal.push_back(BidToAction(bid));
     } else {
-      legal.push_back(kActionBidThree);  // trial bid -- three only
+      legal.push_back(BidToAction(kWeakestBid));  // trial bid -- three only
     }
     std::sort(legal.begin(), legal.end());
     return legal;
@@ -171,16 +185,17 @@ std::vector<Action> BiddingState::LegalActions() const {
     return legal;
   }
 
-  // Bids strictly higher than the standing bid. A jump is a cue bid and is only
-  // legal if the player actually holds the promised card.
-  for (int r = current_bid_rank_ + 1; r < kNumBids; ++r) {
-    CalledCard cue = CueForBid(p, r);
+  // Bids strictly stronger than the standing bid. A jump is a cue bid and is
+  // only legal if the player actually holds the promised card.
+  for (Bid bid : kAllBids) {
+    if (current_bid_.has_value() && !BidStronger(bid, *current_bid_)) continue;
+    CalledCard cue = CueForBid(p, bid);
     if (cue == CalledCard::kNone) {
-      legal.push_back(kActionBidThree + r);  // a plain (non-cue) bid
+      legal.push_back(BidToAction(bid));
     } else {
       bool holds =
           (cue == CalledCard::kXIX) ? info_[p].has_xix : info_[p].has_xviii;
-      if (holds) legal.push_back(kActionBidThree + r);
+      if (holds) legal.push_back(BidToAction(bid));
     }
   }
   if (CanHold(p)) legal.push_back(kActionHold);
@@ -206,20 +221,18 @@ void BiddingState::ApplyBiddingAction(Action action) {
     passed_[p] = true;
   } else if (action == kActionHold) {
     current_bidder_ = p;
-    bid_rank_[p] = current_bid_rank_;
+    player_bid_[p] = current_bid_;
     last_was_hold_ = true;
   } else {
-    int r = action - kActionBidThree;
-    SPIEL_CHECK_GE(r, 0);
-    SPIEL_CHECK_LT(r, kNumBids);
-    CalledCard cue = CueForBid(p, r);
+    Bid bid = ActionToBid(action);
+    CalledCard cue = CueForBid(p, bid);
     if (cue != CalledCard::kNone) {
       cue_bidder_ = p;
       cued_card_ = cue;
     }
-    current_bid_rank_ = r;
+    current_bid_ = bid;
     current_bidder_ = p;
-    bid_rank_[p] = r;
+    player_bid_[p] = bid;
     last_was_hold_ = false;
   }
   AdvanceOrFinish();
@@ -229,12 +242,9 @@ void BiddingState::ApplySoleRaise(Action action) {
   calls_.push_back({declarer_, action});
   awaiting_sole_raise_ = false;
   if (action == kActionPass) {
-    Finish(declarer_, 0);  // keep the three
+    Finish(declarer_, kWeakestBid);
   } else {
-    int r = action - kActionBidThree;
-    SPIEL_CHECK_GE(r, 1);
-    SPIEL_CHECK_LT(r, kNumBids);
-    Finish(declarer_, r);
+    Finish(declarer_, ActionToBid(action));
   }
 }
 
@@ -255,10 +265,10 @@ void BiddingState::AdvanceOrFinish() {
     if (others_all_passed) {
       // An uncontested plain three lets the sole bidder raise first (§3.2).
       int num_bidders = 0;
-      for (int r : bid_rank_) {
-        if (r >= 0) ++num_bidders;
+      for (const absl::optional<Bid>& b : player_bid_) {
+        if (b.has_value()) ++num_bidders;
       }
-      if (current_bid_rank_ == 0 && cue_bidder_ == kInvalidPlayer &&
+      if (current_bid_ == Bid::kThree && cue_bidder_ == kInvalidPlayer &&
           num_bidders == 1 && info_[current_bidder_].has_honour) {
         awaiting_sole_raise_ = true;
         declarer_ = current_bidder_;
@@ -266,11 +276,11 @@ void BiddingState::AdvanceOrFinish() {
         current_player_ = current_bidder_;
         return;
       }
-      Finish(current_bidder_, current_bid_rank_);
+      Finish(current_bidder_, *current_bid_);
       return;
     }
   }
-  // Move to the next player who has not passed.
+
   Player q = current_player_;
   do {
     q = (q + 1) % NumPlayers();
@@ -278,14 +288,13 @@ void BiddingState::AdvanceOrFinish() {
   current_player_ = q;
 }
 
-void BiddingState::Finish(Player winner, int rank) {
+void BiddingState::Finish(Player winner, Bid bid) {
   finished_ = true;
   declarer_ = winner;
-  winning_bid_ = static_cast<Bid>(rank);
+  winning_bid_ = bid;
   if (yielded_) {
     obligatory_called_card_ = CalledCard::kXX;
   } else if (cue_bidder_ != kInvalidPlayer && cue_bidder_ != declarer_) {
-    // A cue bid by another player obliges the declarer to call that card.
     obligatory_called_card_ = cued_card_;
   } else {
     obligatory_called_card_ = CalledCard::kNone;

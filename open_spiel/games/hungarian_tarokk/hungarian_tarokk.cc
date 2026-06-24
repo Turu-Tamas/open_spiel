@@ -1,17 +1,3 @@
-// Copyright 2019 DeepMind Technologies Limited
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #include "open_spiel/games/hungarian_tarokk/hungarian_tarokk.h"
 
 #include <algorithm>
@@ -34,22 +20,20 @@ namespace hungarian_tarokk {
 namespace {
 
 // Facts about the game.
-const GameType kGameType{
-    /*short_name=*/"hungarian_tarokk",
-    /*long_name=*/"Hungarian Tarokk",
-    GameType::Dynamics::kSequential,
-    GameType::ChanceMode::kExplicitStochastic,
-    GameType::Information::kImperfectInformation,
-    GameType::Utility::kZeroSum,
-    GameType::RewardModel::kTerminal,
-    /*max_num_players=*/kNumPlayers,
-    /*min_num_players=*/kNumPlayers,
-    /*provides_information_state_string=*/true,
-    /*provides_information_state_tensor=*/false,
-    /*provides_observation_string=*/true,
-    /*provides_observation_tensor=*/false,
-    /*parameter_specification=*/{}  // no parameters
-};
+const GameType kGameType{/*short_name=*/"hungarian_tarokk",
+                         /*long_name=*/"Hungarian Tarokk",
+                         GameType::Dynamics::kSequential,
+                         GameType::ChanceMode::kExplicitStochastic,
+                         GameType::Information::kImperfectInformation,
+                         GameType::Utility::kZeroSum,
+                         GameType::RewardModel::kTerminal,
+                         /*max_num_players=*/kNumPlayers,
+                         /*min_num_players=*/kNumPlayers,
+                         /*provides_information_state_string=*/true,
+                         /*provides_information_state_tensor=*/false,
+                         /*provides_observation_string=*/true,
+                         /*provides_observation_tensor=*/false,
+                         /*parameter_specification=*/{}};
 
 std::shared_ptr<const Game> Factory(const GameParameters& params) {
   return std::shared_ptr<const Game>(new HungarianTarokkGame(params));
@@ -269,7 +253,8 @@ std::string HungarianTarokkState::ToString() const {
   if (!trick_cards_.empty()) {
     absl::StrAppend(&str, "Current trick: ", CardsToString(trick_cards_), "\n");
   }
-  absl::StrAppend(&str, "Points: ", absl::StrJoin(collected_points_, ","), "\n");
+  absl::StrAppend(&str, "Points: ", absl::StrJoin(collected_points_, ","),
+                  "\n");
   return str;
 }
 
@@ -278,10 +263,9 @@ std::string HungarianTarokkState::InformationStateString(Player player) const {
   SPIEL_CHECK_LT(player, kNumPlayers);
   // The player's private knowledge: their own current hand plus everything that
   // is public (the bidding and the cards played).
-  std::string str = absl::StrCat("P", player, " hand: ",
-                                 CardsToString(players_cards_[player]),
-                                 " | bidding: ", bidding_.ToString(),
-                                 " | history: ", PublicLogString());
+  std::string str = absl::StrCat(
+      "P", player, " hand: ", CardsToString(players_cards_[player]),
+      " | bidding: ", bidding_.ToString(), " | history: ", PublicLogString());
   if (!trick_cards_.empty()) {
     absl::StrAppend(&str, " | trick: ", CardsToString(trick_cards_));
   }
@@ -291,9 +275,9 @@ std::string HungarianTarokkState::InformationStateString(Player player) const {
 std::string HungarianTarokkState::ObservationString(Player player) const {
   SPIEL_CHECK_GE(player, 0);
   SPIEL_CHECK_LT(player, kNumPlayers);
-  std::string str = absl::StrCat("P", player, " hand: ",
-                                 CardsToString(players_cards_[player]),
-                                 " | bidding: ", bidding_.ToString());
+  std::string str = absl::StrCat(
+      "P", player, " hand: ", CardsToString(players_cards_[player]),
+      " | bidding: ", bidding_.ToString());
   if (!trick_cards_.empty()) {
     absl::StrAppend(&str, " | trick: ", CardsToString(trick_cards_));
   }

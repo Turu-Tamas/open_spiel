@@ -1,17 +1,3 @@
-// Copyright 2019 DeepMind Technologies Limited
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #include "open_spiel/games/hungarian_tarokk/hungarian_tarokk.h"
 
 #include <algorithm>
@@ -55,15 +41,15 @@ void BiddingLogicTest() {
   {
     BiddingState b(FourHonours());
     SPIEL_CHECK_EQ(b.CurrentPlayer(), 0);
-    b.ApplyAction(kActionBidThree);                    // P0
-    b.ApplyAction(kActionPass);                        // P1
-    b.ApplyAction(kActionPass);                        // P2
-    b.ApplyAction(kActionPass);                        // P3
+    b.ApplyAction(kActionBidThree);  // P0
+    b.ApplyAction(kActionPass);      // P1
+    b.ApplyAction(kActionPass);      // P2
+    b.ApplyAction(kActionPass);      // P3
     // Not finished: P0 may raise the uncontested three.
     SPIEL_CHECK_FALSE(b.IsFinished());
     SPIEL_CHECK_EQ(b.CurrentPlayer(), 0);
     SPIEL_CHECK_EQ(static_cast<int>(b.LegalActions().size()), 4);
-    b.ApplyAction(kActionPass);                        // keep the three
+    b.ApplyAction(kActionPass);  // keep the three
     SPIEL_CHECK_TRUE(b.IsFinished());
     SPIEL_CHECK_FALSE(b.PassedOut());
     SPIEL_CHECK_EQ(b.Declarer(), 0);
@@ -73,11 +59,11 @@ void BiddingLogicTest() {
   // Same, but the sole bidder raises to solo.
   {
     BiddingState b(FourHonours());
-    b.ApplyAction(kActionBidThree);                    // P0
+    b.ApplyAction(kActionBidThree);  // P0
     b.ApplyAction(kActionPass);
     b.ApplyAction(kActionPass);
     b.ApplyAction(kActionPass);
-    b.ApplyAction(kActionBidSolo);                     // raise three -> solo
+    b.ApplyAction(kActionBidSolo);  // raise three -> solo
     SPIEL_CHECK_TRUE(b.IsFinished());
     SPIEL_CHECK_EQ(b.Declarer(), 0);
     SPIEL_CHECK_TRUE(b.WinningBid() == Bid::kSolo);
@@ -92,9 +78,9 @@ void BiddingLogicTest() {
     b.ApplyAction(kActionPass);      // P3
     SPIEL_CHECK_EQ(b.CurrentPlayer(), 0);
     SPIEL_CHECK_TRUE(Contains(b.LegalActions(), kActionHold));
-    b.ApplyAction(kActionHold);      // P0 holds the two
+    b.ApplyAction(kActionHold);  // P0 holds the two
     SPIEL_CHECK_EQ(b.CurrentPlayer(), 1);
-    b.ApplyAction(kActionPass);      // P1
+    b.ApplyAction(kActionPass);  // P1
     SPIEL_CHECK_TRUE(b.IsFinished());
     SPIEL_CHECK_EQ(b.Declarer(), 0);
     SPIEL_CHECK_TRUE(b.WinningBid() == Bid::kTwo);
@@ -119,21 +105,21 @@ void BiddingLogicTest() {
     SPIEL_CHECK_EQ(b.Declarer(), kInvalidPlayer);
   }
 
-  // Cue bid: P0 three, P1/P2 pass, P3 bids one (a single jump = cue of the XIX),
-  // P0 overcalls solo and wins, so must call P3's XIX (§3.3).
+  // Cue bid: P0 three, P1/P2 pass, P3 bids one (a single jump = cue of the
+  // XIX), P0 overcalls solo and wins, so must call P3's XIX (§3.3).
   {
     std::vector<PlayerBidInfo> info = FourHonours();
     info[3].has_xix = true;
     BiddingState b(info);
-    b.ApplyAction(kActionBidThree);  // P0
-    b.ApplyAction(kActionPass);      // P1
-    b.ApplyAction(kActionPass);      // P2
-    SPIEL_CHECK_TRUE(Contains(b.LegalActions(), kActionBidOne));   // cue XIX
-    b.ApplyAction(kActionBidOne);    // P3 cue bids the XIX
+    b.ApplyAction(kActionBidThree);                               // P0
+    b.ApplyAction(kActionPass);                                   // P1
+    b.ApplyAction(kActionPass);                                   // P2
+    SPIEL_CHECK_TRUE(Contains(b.LegalActions(), kActionBidOne));  // cue XIX
+    b.ApplyAction(kActionBidOne);  // P3 cue bids the XIX
     SPIEL_CHECK_EQ(b.CueBidder(), 3);
     SPIEL_CHECK_TRUE(b.CuedCard() == CalledCard::kXIX);
-    b.ApplyAction(kActionBidSolo);   // P0 overcalls
-    b.ApplyAction(kActionPass);      // P3 passes
+    b.ApplyAction(kActionBidSolo);  // P0 overcalls
+    b.ApplyAction(kActionPass);     // P3 passes
     SPIEL_CHECK_TRUE(b.IsFinished());
     SPIEL_CHECK_EQ(b.Declarer(), 0);
     SPIEL_CHECK_TRUE(b.WinningBid() == Bid::kSolo);
@@ -143,12 +129,12 @@ void BiddingLogicTest() {
   // Cue bids are illegal without the promised card: P3 lacks the XIX/XVIII, so
   // its only positive bid here is the (non-jump) two.
   {
-    BiddingState b(FourHonours());  // nobody holds XIX/XVIII
-    b.ApplyAction(kActionBidThree);  // P0
-    b.ApplyAction(kActionPass);      // P1
-    b.ApplyAction(kActionPass);      // P2
-    std::vector<Action> legal = b.LegalActions();  // P3
-    SPIEL_CHECK_TRUE(Contains(legal, kActionBidTwo));    // minimum overbid
+    BiddingState b(FourHonours());                     // nobody holds XIX/XVIII
+    b.ApplyAction(kActionBidThree);                    // P0
+    b.ApplyAction(kActionPass);                        // P1
+    b.ApplyAction(kActionPass);                        // P2
+    std::vector<Action> legal = b.LegalActions();      // P3
+    SPIEL_CHECK_TRUE(Contains(legal, kActionBidTwo));  // minimum overbid
     SPIEL_CHECK_FALSE(Contains(legal, kActionBidOne));   // would be a cue XIX
     SPIEL_CHECK_FALSE(Contains(legal, kActionBidSolo));  // would be a cue XVIII
   }
@@ -160,12 +146,12 @@ void BiddingLogicTest() {
     info[0].has_xx = true;
     info[0].has_high_honour = true;
     BiddingState b(info);
-    b.ApplyAction(kActionBidThree);  // P0
-    b.ApplyAction(kActionBidTwo);    // P1
-    b.ApplyAction(kActionPass);      // P2
-    b.ApplyAction(kActionPass);      // P3
+    b.ApplyAction(kActionBidThree);                             // P0
+    b.ApplyAction(kActionBidTwo);                               // P1
+    b.ApplyAction(kActionPass);                                 // P2
+    b.ApplyAction(kActionPass);                                 // P3
     SPIEL_CHECK_TRUE(Contains(b.LegalActions(), kActionPass));  // yield allowed
-    b.ApplyAction(kActionPass);      // P0 yields
+    b.ApplyAction(kActionPass);                                 // P0 yields
     SPIEL_CHECK_TRUE(b.IsFinished());
     SPIEL_CHECK_EQ(b.Declarer(), 1);
     SPIEL_CHECK_TRUE(b.WinningBid() == Bid::kTwo);
@@ -175,11 +161,11 @@ void BiddingLogicTest() {
 
   // A yield is illegal without the XX + a high honour: P0 must hold instead.
   {
-    BiddingState b(FourHonours());  // P0 lacks the XX
-    b.ApplyAction(kActionBidThree);  // P0
-    b.ApplyAction(kActionBidTwo);    // P1
-    b.ApplyAction(kActionPass);      // P2
-    b.ApplyAction(kActionPass);      // P3
+    BiddingState b(FourHonours());                 // P0 lacks the XX
+    b.ApplyAction(kActionBidThree);                // P0
+    b.ApplyAction(kActionBidTwo);                  // P1
+    b.ApplyAction(kActionPass);                    // P2
+    b.ApplyAction(kActionPass);                    // P3
     std::vector<Action> legal = b.LegalActions();  // P0 in the yield position
     SPIEL_CHECK_FALSE(Contains(legal, kActionPass));  // cannot yield
     SPIEL_CHECK_TRUE(Contains(legal, kActionHold));   // must hold (or cue bid)
@@ -190,9 +176,9 @@ void BiddingLogicTest() {
   {
     std::vector<PlayerBidInfo> info(kNumPlayers);  // nobody holds an honour
     BiddingState b(info);
-    b.ApplyAction(kActionPass);  // P0
-    b.ApplyAction(kActionPass);  // P1
-    b.ApplyAction(kActionPass);  // P2
+    b.ApplyAction(kActionPass);                    // P0
+    b.ApplyAction(kActionPass);                    // P1
+    b.ApplyAction(kActionPass);                    // P2
     std::vector<Action> legal = b.LegalActions();  // P3
     SPIEL_CHECK_EQ(static_cast<int>(legal.size()), 2);
     SPIEL_CHECK_EQ(legal[0], kActionPass);
@@ -204,7 +190,8 @@ void BiddingLogicTest() {
   }
 }
 
-// Drives a full game through dealing and bidding into the play, then to the end.
+// Drives a full game through dealing and bidding into the play, then to the
+// end.
 void GameBiddingIntegrationTest() {
   std::shared_ptr<const Game> game = LoadGame("hungarian_tarokk");
   std::unique_ptr<State> state = game->NewInitialState();
