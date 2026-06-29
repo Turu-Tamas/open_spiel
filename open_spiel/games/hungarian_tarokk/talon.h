@@ -27,11 +27,11 @@ inline bool IsDiscardAction(Action action) {
   return action >= kDiscardActionBase &&
          action < kDiscardActionBase + kNumCards;
 }
-inline Action DiscardActionForCard(Action card) {
-  return kDiscardActionBase + card;
+inline Action DiscardActionForCard(Card card) {
+  return kDiscardActionBase + card.index;
 }
-inline Action CardForDiscardAction(Action action) {
-  return action - kDiscardActionBase;
+inline Card CardForDiscardAction(Action action) {
+  return Card{static_cast<int>(action - kDiscardActionBase)};
 }
 
 class TalonExchangeState {
@@ -40,8 +40,8 @@ class TalonExchangeState {
   // `hands` are the players' nine-card hands and `talon` the undrawn talon. The
   // declarer and bid fix who draws how many; the cue-bidder may not discard the
   // tarokk they promised (cued_card).
-  TalonExchangeState(std::vector<std::vector<Action>> hands,
-                     std::vector<Action> talon, Player declarer, Bid bid,
+  TalonExchangeState(std::vector<std::vector<Card>> hands,
+                     std::vector<Card> talon, Player declarer, Bid bid,
                      Player cue_bidder, CalledCard cued_card);
 
   Player CurrentPlayer() const;
@@ -51,24 +51,24 @@ class TalonExchangeState {
 
   bool IsFinished() const { return step_ == Step::kDone; }
   bool Annulled() const { return annulled_; }
-  const std::vector<std::vector<Action>>& Hands() const { return hands_; }
-  const std::vector<std::vector<Action>>& Discards() const { return discards_; }
-  const std::vector<Action>& Talon() const { return talon_; }
+  const std::vector<std::vector<Card>>& Hands() const { return hands_; }
+  const std::vector<std::vector<Card>>& Discards() const { return discards_; }
+  const std::vector<Card>& Talon() const { return talon_; }
 
   std::string ToString() const;
 
  private:
   enum class Step { kDraw, kAnnul, kDiscard, kDone };
 
-  bool CanDiscard(Player player, Action card) const;
+  bool CanDiscard(Player player, Card card) const;
   void StartAnnulment();
   void AdvanceAnnulment();
   void StartDiscarding();
   void AdvanceDiscarding();
 
-  std::vector<std::vector<Action>> hands_;
-  std::vector<Action> talon_;
-  std::vector<std::vector<Action>> discards_;
+  std::vector<std::vector<Card>> hands_;
+  std::vector<Card> talon_;
+  std::vector<std::vector<Card>> discards_;
   Player declarer_ = kInvalidPlayer;
   Player cue_bidder_ = kInvalidPlayer;
   CalledCard cued_card_ = CalledCard::kNone;

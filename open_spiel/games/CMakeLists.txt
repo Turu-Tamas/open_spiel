@@ -124,6 +124,8 @@ set(GAME_SOURCES
   hive/hive_board.h
   hungarian_tarokk/hungarian_tarokk.cc
   hungarian_tarokk/hungarian_tarokk.h
+  hungarian_tarokk/announcements.cc
+  hungarian_tarokk/announcements.h
   hungarian_tarokk/bidding.cc
   hungarian_tarokk/bidding.h
   hungarian_tarokk/cards.cc

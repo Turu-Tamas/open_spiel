@@ -14,10 +14,10 @@
 namespace open_spiel {
 namespace hungarian_tarokk {
 
-TalonExchangeState::TalonExchangeState(std::vector<std::vector<Action>> hands,
-                                       std::vector<Action> talon,
-                                       Player declarer, Bid bid,
-                                       Player cue_bidder, CalledCard cued_card)
+TalonExchangeState::TalonExchangeState(std::vector<std::vector<Card>> hands,
+                                       std::vector<Card> talon, Player declarer,
+                                       Bid bid, Player cue_bidder,
+                                       CalledCard cued_card)
     : hands_(std::move(hands)),
       talon_(std::move(talon)),
       declarer_(declarer),
@@ -55,18 +55,20 @@ ActionsAndProbs TalonExchangeState::ChanceOutcomes() const {
   ActionsAndProbs outcomes;
   outcomes.reserve(talon_.size());
   const double p = 1.0 / static_cast<double>(talon_.size());
-  for (Action card : talon_) outcomes.emplace_back(card, p);
+  for (Card card : talon_) outcomes.emplace_back(CardToAction(card), p);
   return outcomes;
 }
 
 std::vector<Action> TalonExchangeState::LegalActions() const {
-  if (step_ == Step::kDraw) return talon_;  // chance: undrawn talon (sorted)
+  if (step_ == Step::kDraw) {
+    return CardsToActions(talon_);  // chance: undrawn talon (sorted)
+  }
   if (step_ == Step::kAnnul) {
     return {kActionAnnul, kActionDeclineAnnul};
   }
   if (step_ == Step::kDiscard) {
     std::vector<Action> legal;
-    for (Action c : hands_[current_player_]) {
+    for (Card c : hands_[current_player_]) {
       if (CanDiscard(current_player_, c)) {
         legal.push_back(DiscardActionForCard(c));
       }
@@ -79,13 +81,14 @@ std::vector<Action> TalonExchangeState::LegalActions() const {
 
 void TalonExchangeState::ApplyAction(Action action) {
   if (step_ == Step::kDraw) {
-    auto it = std::find(talon_.begin(), talon_.end(), action);
+    const Card card = CardFromAction(action);
+    auto it = std::find(talon_.begin(), talon_.end(), card);
     SPIEL_CHECK_TRUE(it != talon_.end());
     talon_.erase(it);
-    hands_[recipients_[draw_index_]].push_back(action);
+    hands_[recipients_[draw_index_]].push_back(card);
     ++draw_index_;
     if (draw_index_ == static_cast<int>(recipients_.size())) {
-      for (std::vector<Action>& hand : hands_) {
+      for (std::vector<Card>& hand : hands_) {
         std::sort(hand.begin(), hand.end());
       }
       StartAnnulment();  // a player may throw the hand in before discarding
@@ -106,8 +109,8 @@ void TalonExchangeState::ApplyAction(Action action) {
   }
 
   SPIEL_CHECK_TRUE(step_ == Step::kDiscard);
-  const Action card = CardForDiscardAction(action);
-  std::vector<Action>& hand = hands_[current_player_];
+  const Card card = CardForDiscardAction(action);
+  std::vector<Card>& hand = hands_[current_player_];
   auto it = std::find(hand.begin(), hand.end(), card);
   SPIEL_CHECK_TRUE(it != hand.end());
   hand.erase(it);
@@ -157,7 +160,7 @@ void TalonExchangeState::AdvanceDiscarding() {
   step_ = Step::kDone;
 }
 
-bool TalonExchangeState::CanDiscard(Player player, Action card) const {
+bool TalonExchangeState::CanDiscard(Player player, Card card) const {
   if (!IsDiscardableCard(card)) return false;
   // The cue-bidder may not discard the tarokk they promised.
   if (cue_bidder_ == player) {

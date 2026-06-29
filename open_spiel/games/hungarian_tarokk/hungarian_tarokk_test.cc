@@ -274,18 +274,18 @@ void CardHelperTest() {
 
 // Completes a valid 42-card deal: player 0 gets `hand0`. `hand0` and the
 // talon must be disjoint and contain 9 and 6 cards, respectively.
-std::vector<std::vector<Action>> DealWith(const std::vector<Action>& hand0,
-                                          const std::vector<Action>& talon) {
+std::vector<std::vector<Card>> DealWith(const std::vector<Card>& hand0,
+                                        const std::vector<Card>& talon) {
   std::vector<bool> used(kNumCards, false);
-  for (Action c : hand0) used[c] = true;
-  for (Action c : talon) used[c] = true;
-  std::vector<std::vector<Action>> hands(kNumPlayers);
+  for (Card c : hand0) used[c.index] = true;
+  for (Card c : talon) used[c.index] = true;
+  std::vector<std::vector<Card>> hands(kNumPlayers);
   hands[0] = hand0;
   int p = 1;
-  for (Action c = 0; c < kNumCards; ++c) {
+  for (int c = 0; c < kNumCards; ++c) {
     if (used[c]) continue;
     if (static_cast<int>(hands[p].size()) == kHandSize) ++p;
-    hands[p].push_back(c);
+    hands[p].push_back(Card{c});
   }
   return hands;
 }
@@ -299,13 +299,12 @@ void DrawTalon(TalonExchangeState* t) {
 
 // The lowest `count` card ids not already in `hand`, as a talon disjoint from
 // it (the exact cards do not matter, only that they are valid and distinct).
-std::vector<Action> UnusedTalon(const std::vector<Action>& hand) {
+std::vector<Card> UnusedTalon(const std::vector<Card>& hand) {
   std::vector<bool> used(kNumCards, false);
-  for (Action c : hand) used[c] = true;
-  std::vector<Action> talon;
-  for (Action c = 0;
-       c < kNumCards && static_cast<int>(talon.size()) < kTalonSize; ++c) {
-    if (!used[c]) talon.push_back(c);
+  for (Card c : hand) used[c.index] = true;
+  std::vector<Card> talon;
+  for (int c = 0; c < kNumCards && talon.size() < kTalonSize; ++c) {
+    if (!used[c]) talon.push_back(Card{c});
   }
   return talon;
 }
@@ -316,10 +315,10 @@ void TalonLogicTest() {
   // and a king among ordinary tarokks; after drawing it may discard none of
   // those, but may discard the ordinary cards.
   {
-    std::vector<Action> hand0 = {kCardPagat, Tarokk(2), Tarokk(3),
-                                 Tarokk(4),  Tarokk(5), kCardXX,
-                                 kCardXXI,   kCardSkiz, MakeKing(kHearts)};
-    std::vector<Action> talon = UnusedTalon(hand0);
+    std::vector<Card> hand0 = {kCardPagat, Tarokk(2), Tarokk(3),
+                               Tarokk(4),  Tarokk(5), kCardXX,
+                               kCardXXI,   kCardSkiz, MakeKing(kHearts)};
+    std::vector<Card> talon = UnusedTalon(hand0);
     TalonExchangeState t(DealWith(hand0, talon), talon, /*declarer=*/0,
                          Bid::kThree, kInvalidPlayer, CalledCard::kNone);
     DrawTalon(&t);
@@ -328,22 +327,22 @@ void TalonLogicTest() {
     }
     SPIEL_CHECK_EQ(t.CurrentPlayer(), 0);
     std::vector<Action> legal = t.LegalActions();
-    std::vector<Action> forbidden = {kCardPagat, kCardXXI, kCardSkiz, kCardXX,
-                                     MakeKing(kHearts)};
-    for (Action f : forbidden) {
+    std::vector<Card> forbidden = {kCardPagat, kCardXXI, kCardSkiz, kCardXX,
+                                   MakeKing(kHearts)};
+    for (Card f : forbidden) {
       SPIEL_CHECK_FALSE(Contains(legal, DiscardActionForCard(f)));
     }
-    for (Action ok : {Tarokk(2), Tarokk(3), Tarokk(4), Tarokk(5)}) {
+    for (Card ok : {Tarokk(2), Tarokk(3), Tarokk(4), Tarokk(5)}) {
       SPIEL_CHECK_TRUE(Contains(legal, DiscardActionForCard(ok)));
     }
   }
 
   // The cue-bidder may not discard the tarokk they promised (here the XIX).
   {
-    std::vector<Action> hand0 = {Tarokk(2), Tarokk(3), Tarokk(4),
-                                 Tarokk(5), Tarokk(6), Tarokk(7),
-                                 Tarokk(8), kCardXX,   kCardXIX};
-    std::vector<Action> talon = UnusedTalon(hand0);
+    std::vector<Card> hand0 = {Tarokk(2), Tarokk(3), Tarokk(4),
+                               Tarokk(5), Tarokk(6), Tarokk(7),
+                               Tarokk(8), kCardXX,   kCardXIX};
+    std::vector<Card> talon = UnusedTalon(hand0);
     TalonExchangeState t(DealWith(hand0, talon), talon, /*declarer=*/0,
                          Bid::kTwo, /*cue_bidder=*/0, CalledCard::kXIX);
     DrawTalon(&t);
@@ -360,11 +359,11 @@ void TalonLogicTest() {
   // Annulment with all four kings: P0 (declarer, solo -> draws nothing) is
   // offered the throw-in first and takes it.
   {
-    std::vector<Action> hand0 = {
+    std::vector<Card> hand0 = {
         Tarokk(2),           Tarokk(3),        Tarokk(4),
         Tarokk(5),           Tarokk(6),        MakeKing(kHearts),
         MakeKing(kDiamonds), MakeKing(kClubs), MakeKing(kSpades)};
-    std::vector<Action> talon = UnusedTalon(hand0);
+    std::vector<Card> talon = UnusedTalon(hand0);
     TalonExchangeState t(DealWith(hand0, talon), talon, /*declarer=*/0,
                          Bid::kSolo, kInvalidPlayer, CalledCard::kNone);
     DrawTalon(&t);
@@ -378,16 +377,16 @@ void TalonLogicTest() {
 
   // Annulment with the XXI + pagát only: likewise offered and taken.
   {
-    std::vector<Action> hand0 = {kCardPagat,
-                                 kCardXXI,
-                                 SuitCard(kHearts, kLow),
-                                 SuitCard(kHearts, kJack),
-                                 SuitCard(kHearts, kRider),
-                                 SuitCard(kHearts, kQueen),
-                                 SuitCard(kDiamonds, kLow),
-                                 SuitCard(kDiamonds, kKing),
-                                 SuitCard(kDiamonds, kRider)};
-    std::vector<Action> talon = UnusedTalon(hand0);
+    std::vector<Card> hand0 = {kCardPagat,
+                               kCardXXI,
+                               SuitCard(kHearts, kLow),
+                               SuitCard(kHearts, kJack),
+                               SuitCard(kHearts, kRider),
+                               SuitCard(kHearts, kQueen),
+                               SuitCard(kDiamonds, kLow),
+                               SuitCard(kDiamonds, kKing),
+                               SuitCard(kDiamonds, kRider)};
+    std::vector<Card> talon = UnusedTalon(hand0);
     TalonExchangeState t(DealWith(hand0, talon), talon, /*declarer=*/0,
                          Bid::kSolo, kInvalidPlayer, CalledCard::kNone);
     DrawTalon(&t);
@@ -400,6 +399,86 @@ void TalonLogicTest() {
   }
 }
 
+// Engineered announcement rounds: partner calling and the kontra alternation.
+void AnnouncementLogicTest() {
+  // A few hands; only the declarer's hand (legal calls) and who holds the
+  // called card (the partner) matter.
+  auto hands = [](Player xx_holder) {
+    std::vector<std::vector<Card>> h(kNumPlayers);
+    h[0] = {Tarokk(2), Tarokk(3), Tarokk(4), Tarokk(5),
+            Tarokk(6), Tarokk(7), Tarokk(8), kCardSkiz};  // declarer, no XX
+    h[1] = {SuitCard(kHearts, kLow)};
+    h[2] = {SuitCard(kHearts, kJack)};
+    h[3] = {SuitCard(kHearts, kRider)};
+    h[xx_holder].push_back(kCardXX);
+    return h;
+  };
+
+  // The declarer lacks the XX, so must call it; the partner is its holder (P2).
+  {
+    AnnouncementState a(hands(2), /*declarer=*/0, Bid::kThree,
+                        CalledCard::kNone);
+    SPIEL_CHECK_EQ(a.CurrentPlayer(), 0);
+    std::vector<Action> expected = {CallActionForTarokk(kCardXX)};
+    SPIEL_CHECK_EQ(expected, a.LegalActions());
+    a.ApplyAction(CallActionForTarokk(kCardXX));
+    SPIEL_CHECK_EQ(a.Partner(), 2);
+  }
+
+  // A cue obligation forces the call (here the XIX).
+  {
+    AnnouncementState a(hands(2), 0, Bid::kSolo, CalledCard::kXIX);
+    std::vector<Action> expected = {CallActionForTarokk(kCardXIX)};
+    SPIEL_CHECK_EQ(expected, a.LegalActions());
+  }
+
+  // The declarer holds the XX and XIX: it may call the highest tarokk below the XX that
+  // it does not hold (the XVIII here), or its own XX to play alone.
+  {
+    std::vector<std::vector<Card>> h = hands(0);
+    h[0].push_back(kCardXIX);
+    AnnouncementState a(h, 0, Bid::kThree, CalledCard::kNone);
+    std::vector<Action> expected = {CallActionForTarokk(kCardXVIII),
+                                    CallActionForTarokk(kCardXX)};
+    SPIEL_CHECK_EQ(expected, a.LegalActions());
+    a.ApplyAction(CallActionForTarokk(kCardXX));  // call own XX -> play alone
+    SPIEL_CHECK_EQ(a.Partner(), kInvalidPlayer);
+  }
+
+  // Both sides may announce the same bonus, each with its own kontra chain
+  // (§5.2, §5.3). The declarer (side 0) announces trull; a defender (side 1)
+  // both announces its own trull and kontras the declarers' trull; the partner
+  // (side 0) may then rekontra its own and kontra the defenders'.
+  {
+    AnnouncementState a(hands(2), 0, Bid::kThree, CalledCard::kNone);
+    a.ApplyAction(CallActionForTarokk(kCardXX));  // P0 calls (partner P2)
+    a.ApplyAction(
+        AnnounceBonusAction(Bonus::kTrull));  // P0: (trull, declarers)
+    a.ApplyAction(kActionAnnouncePass);       // P0 ends its turn
+    SPIEL_CHECK_EQ(a.CurrentPlayer(), 1);     // a defender (side 1)
+    std::vector<Action> legal = a.LegalActions();
+    // The defender may kontra the declarers' trull and the game, and may still
+    // announce its own trull.
+    SPIEL_CHECK_TRUE(
+        Contains(legal, KontraClaimAction(Bonus::kTrull, Side::kDeclarers)));
+    SPIEL_CHECK_TRUE(Contains(legal, kKontraActionBase + kGameKontraItem));
+    SPIEL_CHECK_TRUE(Contains(legal, AnnounceBonusAction(Bonus::kTrull)));
+    a.ApplyAction(
+        AnnounceBonusAction(Bonus::kTrull));  // P1: (trull, defenders)
+    a.ApplyAction(
+        KontraClaimAction(Bonus::kTrull, Side::kDeclarers));  // kontra P0's
+    a.ApplyAction(kActionAnnouncePass);
+    SPIEL_CHECK_EQ(a.CurrentPlayer(), 2);  // declarer's partner (side 0)
+    std::vector<Action> legal2 = a.LegalActions();
+    // The declarers' trull (now level 1) is theirs to rekontra; the defenders'
+    // trull (level 0) is theirs to kontra -- two distinct, unambiguous actions.
+    SPIEL_CHECK_TRUE(
+        Contains(legal2, KontraClaimAction(Bonus::kTrull, Side::kDeclarers)));
+    SPIEL_CHECK_TRUE(
+        Contains(legal2, KontraClaimAction(Bonus::kTrull, Side::kDefenders)));
+  }
+}
+
 }  // namespace
 }  // namespace hungarian_tarokk
 }  // namespace open_spiel
@@ -408,5 +487,6 @@ int main(int argc, char** argv) {
   open_spiel::hungarian_tarokk::BiddingLogicTest();
   open_spiel::hungarian_tarokk::CardHelperTest();
   open_spiel::hungarian_tarokk::TalonLogicTest();
+  open_spiel::hungarian_tarokk::AnnouncementLogicTest();
   open_spiel::hungarian_tarokk::BasicHungarianTarokkTests();
 }

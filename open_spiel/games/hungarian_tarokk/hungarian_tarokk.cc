@@ -49,6 +49,8 @@ std::string PhaseToString(Phase phase) {
       return "Bidding";
     case Phase::kTalonExchange:
       return "TalonExchange";
+    case Phase::kAnnouncements:
+      return "Announcements";
     case Phase::kPlaying:
       return "Playing";
     case Phase::kFinished:
@@ -71,19 +73,19 @@ HungarianTarokkState::HungarianTarokkState(std::shared_ptr<const Game> game)
   collected_points_.fill(0);
 }
 
-const std::vector<std::vector<Action>>& HungarianTarokkState::CurrentHands()
+const std::vector<std::vector<Card>>& HungarianTarokkState::CurrentHands()
     const {
   return phase_ == Phase::kTalonExchange ? talon_exchange_.Hands()
                                          : players_cards_;
 }
 
-const std::vector<std::vector<Action>>& HungarianTarokkState::CurrentDiscards()
+const std::vector<std::vector<Card>>& HungarianTarokkState::CurrentDiscards()
     const {
   return phase_ == Phase::kTalonExchange ? talon_exchange_.Discards()
                                          : discarded_;
 }
 
-const std::vector<Action>& HungarianTarokkState::CurrentTalon() const {
+const std::vector<Card>& HungarianTarokkState::CurrentTalon() const {
   return phase_ == Phase::kTalonExchange ? talon_exchange_.Talon() : talon_;
 }
 
@@ -92,6 +94,7 @@ Player HungarianTarokkState::CurrentPlayer() const {
   if (phase_ == Phase::kDealing) return kChancePlayerId;
   if (phase_ == Phase::kBidding) return bidding_.CurrentPlayer();
   if (phase_ == Phase::kTalonExchange) return talon_exchange_.CurrentPlayer();
+  if (phase_ == Phase::kAnnouncements) return announcements_.CurrentPlayer();
   return current_player_;  // play
 }
 
@@ -105,33 +108,35 @@ ActionsAndProbs HungarianTarokkState::ChanceOutcomes() const {
   ActionsAndProbs outcomes;
   outcomes.reserve(deck_.size());
   const double p = 1.0 / static_cast<double>(deck_.size());
-  for (Action card : deck_) outcomes.push_back({card, p});
+  for (Card card : deck_) outcomes.push_back({CardToAction(card), p});
   return outcomes;
 }
 
 std::vector<Action> HungarianTarokkState::LegalActions() const {
   if (phase_ == Phase::kFinished) return {};
-  if (phase_ == Phase::kDealing) return deck_;  // chance: undealt cards
+  // chance: undealt cards
+  if (phase_ == Phase::kDealing) return CardsToActions(deck_);
   if (phase_ == Phase::kBidding) return bidding_.LegalActions();
   if (phase_ == Phase::kTalonExchange) return talon_exchange_.LegalActions();
+  if (phase_ == Phase::kAnnouncements) return announcements_.LegalActions();
   return LegalPlayActions();
 }
 
 std::vector<Action> HungarianTarokkState::LegalPlayActions() const {
-  const std::vector<Action>& hand = players_cards_[current_player_];
-  std::vector<Action> legal;
+  const std::vector<Card>& hand = players_cards_[current_player_];
+  std::vector<Card> legal;
   if (trick_cards_.empty()) {
     // Leading: any card may be played.
     legal = hand;
   } else {
     int led_suit = CardSuit(trick_cards_.front());
     // Must follow the led suit if possible.
-    for (Action c : hand) {
+    for (Card c : hand) {
       if (CardSuit(c) == led_suit) legal.push_back(c);
     }
     if (legal.empty()) {
       // Otherwise must play a tarokk if holding one.
-      for (Action c : hand) {
+      for (Card c : hand) {
         if (IsTarokk(c)) legal.push_back(c);
       }
     }
@@ -139,28 +144,29 @@ std::vector<Action> HungarianTarokkState::LegalPlayActions() const {
     if (legal.empty()) legal = hand;
   }
   std::sort(legal.begin(), legal.end());
-  return legal;
+  return CardsToActions(legal);
 }
 
 void HungarianTarokkState::DoApplyAction(Action action_id) {
   if (phase_ == Phase::kDealing) {
-    auto it = std::find(deck_.begin(), deck_.end(), action_id);
+    const Card card = CardFromAction(action_id);
+    auto it = std::find(deck_.begin(), deck_.end(), card);
     SPIEL_CHECK_TRUE(it != deck_.end());
     deck_.erase(it);
     Player target = cards_dealt_ % kNumPlayers;
-    players_cards_[target].push_back(action_id);
+    players_cards_[target].push_back(card);
     ++cards_dealt_;
     if (cards_dealt_ == kCardsDealtToPlayers) {
       // The remaining six cards form the talon.
       talon_ = deck_;
       deck_.clear();
-      for (std::vector<Action>& hand : players_cards_) {
+      for (std::vector<Card>& hand : players_cards_) {
         std::sort(hand.begin(), hand.end());
       }
       // Start the auction.
       std::vector<PlayerBidInfo> info(kNumPlayers);
       for (int p = 0; p < kNumPlayers; ++p) {
-        const std::vector<Action>& hand = players_cards_[p];
+        const std::vector<Card>& hand = players_cards_[p];
         info[p].has_honour = HandHasHonour(hand);
         info[p].has_high_honour = HandHasHighHonour(hand);
         info[p].has_xx = HandHasCard(hand, kCardXX);
@@ -205,20 +211,34 @@ void HungarianTarokkState::DoApplyAction(Action action_id) {
         // (With partnerships the defenders' skart is pooled for the opposing
         // side; that is left for later.)
         for (int p = 0; p < kNumPlayers; ++p) {
-          for (Action c : discarded_[p]) collected_points_[p] += CardPoints(c);
+          for (Card c : discarded_[p]) collected_points_[p] += CardPoints(c);
         }
-        StartPlaying();
+        announcements_ =
+            AnnouncementState(players_cards_, declarer_, winning_bid_,
+                              bidding_.ObligatoryCalledCard());
+        phase_ = Phase::kAnnouncements;
       }
     }
     return;
   }
 
+  if (phase_ == Phase::kAnnouncements) {
+    announcements_.ApplyAction(action_id);
+    if (announcements_.IsFinished()) {
+      called_card_ = announcements_.CalledCardTarokk();
+      partner_ = announcements_.Partner();
+      StartPlaying();
+    }
+    return;
+  }
+
   // Playing phase.
-  std::vector<Action>& hand = players_cards_[current_player_];
-  auto it = std::find(hand.begin(), hand.end(), action_id);
+  const Card card = CardFromAction(action_id);
+  std::vector<Card>& hand = players_cards_[current_player_];
+  auto it = std::find(hand.begin(), hand.end(), card);
   SPIEL_CHECK_TRUE(it != hand.end());
   hand.erase(it);
-  trick_cards_.push_back(action_id);
+  trick_cards_.push_back(card);
   if (trick_cards_.size() < kNumPlayers) {
     current_player_ = (current_player_ + 1) % kNumPlayers;
   } else {
@@ -235,7 +255,7 @@ void HungarianTarokkState::ResolveTrick() {
     }
   }
   Player winner = (trick_leader_ + best_index) % kNumPlayers;
-  for (Action c : trick_cards_) collected_points_[winner] += CardPoints(c);
+  for (Card c : trick_cards_) collected_points_[winner] += CardPoints(c);
   completed_tricks_.push_back(trick_cards_);
   trick_cards_.clear();
   ++tricks_played_;
@@ -271,7 +291,7 @@ std::vector<double> HungarianTarokkState::Returns() const {
 std::string HungarianTarokkState::PublicLogString() const {
   std::vector<std::string> tricks;
   tricks.reserve(completed_tricks_.size());
-  for (const std::vector<Action>& t : completed_tricks_) {
+  for (const std::vector<Card>& t : completed_tricks_) {
     tricks.push_back(CardsToString(t));
   }
   return absl::StrJoin(tricks, " / ");
@@ -281,7 +301,7 @@ std::string HungarianTarokkState::ActionToString(Player player,
                                                  Action action_id) const {
   if (player == kChancePlayerId) {
     const char* verb = phase_ == Phase::kTalonExchange ? "Draw " : "Deal ";
-    return absl::StrCat(verb, CardToString(action_id));
+    return absl::StrCat(verb, CardToString(CardFromAction(action_id)));
   }
   if (IsBiddingAction(action_id)) return BiddingActionToString(action_id);
   if (action_id == kActionAnnul) return "Annul";
@@ -290,12 +310,15 @@ std::string HungarianTarokkState::ActionToString(Player player,
     return absl::StrCat("Discard ",
                         CardToString(CardForDiscardAction(action_id)));
   }
-  return CardToString(action_id);  // playing a card
+  if (action_id >= kCallActionBase && action_id <= kLastAnnounceAction) {
+    return AnnouncementActionToString(action_id);
+  }
+  return CardToString(CardFromAction(action_id));  // playing a card
 }
 
 std::string HungarianTarokkState::ToString() const {
-  const std::vector<std::vector<Action>>& hands = CurrentHands();
-  const std::vector<std::vector<Action>>& discards = CurrentDiscards();
+  const std::vector<std::vector<Card>>& hands = CurrentHands();
+  const std::vector<std::vector<Card>>& discards = CurrentDiscards();
   std::string str = absl::StrCat("Phase: ", PhaseToString(phase_), "\n");
   for (int p = 0; p < kNumPlayers; ++p) {
     absl::StrAppend(&str, "P", p, " hand: ", CardsToString(hands[p]));
@@ -312,6 +335,11 @@ std::string HungarianTarokkState::ToString() const {
   }
   if (phase_ == Phase::kTalonExchange) {
     absl::StrAppend(&str, "Talon exchange: ", talon_exchange_.ToString(), "\n");
+  }
+  std::string ann = announcements_.ToString();
+  if (!ann.empty()) absl::StrAppend(&str, "Announcements: ", ann, "\n");
+  if (partner_ != kInvalidPlayer) {
+    absl::StrAppend(&str, "Partner: P", partner_, "\n");
   }
   absl::StrAppend(&str, "Tricks: ", PublicLogString(), "\n");
   if (!trick_cards_.empty()) {
@@ -330,7 +358,9 @@ std::string HungarianTarokkState::InformationStateString(Player player) const {
   std::string str = absl::StrCat(
       "P", player, " hand: ", CardsToString(CurrentHands()[player]),
       " | skart: ", CardsToString(CurrentDiscards()[player]),
-      " | bidding: ", bidding_.ToString(), " | history: ", PublicLogString());
+      " | bidding: ", bidding_.ToString(),
+      " | announcements: ", announcements_.ToString(),
+      " | history: ", PublicLogString());
   if (!trick_cards_.empty()) {
     absl::StrAppend(&str, " | trick: ", CardsToString(trick_cards_));
   }
