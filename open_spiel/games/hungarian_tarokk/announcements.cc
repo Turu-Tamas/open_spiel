@@ -71,6 +71,8 @@ AnnouncementState::AnnouncementState(std::vector<std::vector<Card>> hands,
   kontra_level_.fill(0);
   pagat_ulti_committed_.fill(false);
   declared_tarokks_.fill(0);
+  public_side_.fill(absl::nullopt);
+  public_side_[declarer_] = Side::kDeclarers;  // the declarer's side is public
 }
 
 Side AnnouncementState::SideOf(Player p) const {
@@ -153,6 +155,54 @@ bool AnnouncementState::HasPendingObligation(Player p) const {
   return false;
 }
 
+bool AnnouncementState::CanAnnounceForOwnSide(Player p) const {
+  // If p's side is already public it may announce for it directly; otherwise the
+  // §5.5 convention attributes the announcement to the last speaker's side (the
+  // declarer's if none), so it only lands on p's own side when the two match.
+  if (public_side_[p].has_value()) return true;
+  return ConventionDefaultSide() == SideOf(p);
+}
+
+void AnnouncementState::RevealSide(Player p) {
+  public_side_[p] = SideOf(p);
+  last_speaker_side_ = SideOf(p);
+  DeducePublicSides();
+}
+
+void AnnouncementState::DeducePublicSides() {
+  bool partner_identified = false;
+  int known_defenders = 0;
+  int unknown = 0;
+  Player last_unknown = kInvalidPlayer;
+
+  for (Player p = 0; p < kNumPlayers; ++p) {
+    if (p == declarer_) continue;
+    if (!public_side_[p].has_value()) {
+      ++unknown;
+      last_unknown = p;
+    } else if (*public_side_[p] == Side::kDeclarers) {
+      partner_identified = true;  // a non-declarer on the declarer's side
+    } else {
+      ++known_defenders;
+    }
+  }
+
+  // Once the partner is identified, every other non-declarer is a defender.
+  if (partner_identified && unknown > 0) {
+    for (Player p = 0; p < kNumPlayers; ++p) {
+      if (p != declarer_ && !public_side_[p].has_value()) {
+        public_side_[p] = Side::kDefenders;
+      }
+    }
+  }
+  // If a partner is known to exist and the other two are known defenders, the
+  // last unknown must be that partner. (Not so after a bare XX call, where the
+  // declarer might instead be playing alone.)
+  if (partner_known_to_exist_ && known_defenders == 2 && unknown == 1) {
+    public_side_[last_unknown] = Side::kDeclarers;
+  }
+}
+
 std::vector<Action> AnnouncementState::LegalActions() const {
   SPIEL_CHECK_FALSE(finished_);
   Player p = current_player_;
@@ -162,21 +212,25 @@ std::vector<Action> AnnouncementState::LegalActions() const {
   std::vector<Action> legal;
   // Pass ends the turn -- forbidden while a mandatory declaration is still owed
   if (!HasPendingObligation(p)) legal.push_back(kActionAnnouncePass);
+  // Bonus and tarokk-count announcements are side-carrying: a player whose side
+  // is not yet public may only make one that the §5.5 convention attributes to
+  // its own side (otherwise it must first reveal itself with a kontra).
+  const bool can_announce = CanAnnounceForOwnSide(p);
   for (int b = 0; b < kNumBonuses; ++b) {
-    if (BonusAnnounceable(b, p))
+    if (can_announce && BonusAnnounceable(b, p))
       legal.push_back(AnnounceBonusAction(static_cast<Bonus>(b)));
   }
   for (int i = 0; i < kNumKontraItems; ++i) {
-    // The action for item i is kKontraActionBase + i (the game, or a specific
-    // (bonus, side) claim) -- not the raiser's own side, which is wrong when
-    // kontra-ing the opponent's claim.
+    // No side-deduction requirements for kontras, because you have
+    // to be against the side that announced the bonus.
     if (kontra_level_[i] < kMaxKontra && KontraRaiserSide(i) == SideOf(p)) {
       legal.push_back(
           KontraClaimAction(BonusForKontraItem(i), SideForKontraItem(i)));
     }
   }
-  // A player holding 8/9 tarokks may declare their tarokk count
-  if (declared_tarokks_[p] == 0) {
+  // A player holding 8/9 tarokks may declare their tarokk count (also side-
+  // carrying, so subject to the same reveal rule).
+  if (can_announce && declared_tarokks_[p] == 0) {
     const int n = CountTarokks(hands_[p]);
     if (n == 9) legal.push_back(kActionDeclareNine);
     else if (n == 8) legal.push_back(kActionDeclareEight);
@@ -199,18 +253,37 @@ void AnnouncementState::ApplyAction(Action action) {
         break;
       }
     }
+    // §5.5 public side-deduction from the call.
+    if (obligatory_ != CalledCard::kNone) {
+      // A forced call (an accepted cue bid, or a yield) names the publicly-known
+      // inviter as the partner, so the whole table's sides become public.
+      partner_known_to_exist_ = true;
+      if (partner_ != kInvalidPlayer) public_side_[partner_] = Side::kDeclarers;
+      DeducePublicSides();
+    } else if (called_card_ == kCardXX) {
+      // A bare XX call may instead be the declarer calling itself to play alone,
+      // so the public does not yet know a partner exists.
+      partner_known_to_exist_ = false;
+    } else {
+      // Calling any other tarokk requires a partner (you may call yourself only
+      // with the XX), though its identity stays hidden for now.
+      partner_known_to_exist_ = true;
+    }
     spoke_this_turn_ = true;
     return;  // still the declarer's turn
   }
+
   if (IsAnnounceBonusAction(action)) {
     const int bonus = action - kAnnounceBonusBase;
     bonus_announced_[bonus][static_cast<int>(SideOf(p))] = true;
     if (bonus == static_cast<int>(Bonus::kPagatUlti)) {
       pagat_ulti_committed_[p] = true;  // must now declare 8/9 if held
     }
+    RevealSide(p);
     spoke_this_turn_ = true;
     return;
   }
+
   if (IsKontraAction(action)) {
     const int item = action - kKontraActionBase;
     kontra_level_[item] += 1;
@@ -218,14 +291,18 @@ void AnnouncementState::ApplyAction(Action action) {
         BonusForKontraItem(item) == Bonus::kPagatUlti) {
       pagat_ulti_committed_[p] = true;  // kontra-ing ulti also forces 8/9
     }
+    RevealSide(p);
     spoke_this_turn_ = true;
     return;
   }
+
   if (IsTarokkDeclareAction(action)) {
     declared_tarokks_[p] = (action == kActionDeclareNine) ? 9 : 8;
+    RevealSide(p);
     spoke_this_turn_ = true;
     return;
   }
+
   SPIEL_CHECK_EQ(action, kActionAnnouncePass);
   EndTurn();
 }

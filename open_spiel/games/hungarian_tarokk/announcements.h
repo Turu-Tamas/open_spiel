@@ -13,11 +13,10 @@
 #include "open_spiel/spiel.h"
 
 // Simplifications for now (to be refined later, see rules.md):
-//   * sides are taken from the *actual* partnership (the engine knows who holds
-//     the called card) rather than from the public side-deduction of §5.5;
 //   * the tulétroá honour promises (§5.7) are not modelled, and announced
 //     bonuses / tarokk declarations do not yet affect scoring;
-//   * calling a discarded tarokk (§4.3) is not handled.
+//   * calling a discarded tarokk (§4.3) is not handled, so the holder of a
+//     called card is always one of the current hands.
 
 namespace open_spiel {
 namespace hungarian_tarokk {
@@ -123,6 +122,9 @@ class AnnouncementState {
   Player Partner() const { return partner_; }
   // The tarokk count (0, 8 or 9) a player declared (tarokkszám, §5.4).
   int DeclaredTarokks(Player p) const { return declared_tarokks_[p]; }
+  // The side a player is publicly known to be on, or nullopt if it cannot yet be
+  // deduced from the call and the announcements so far (§5.5).
+  absl::optional<Side> PublicSide(Player p) const { return public_side_[p]; }
 
   std::string ToString() const;  // public log (does not reveal the partner)
 
@@ -137,6 +139,22 @@ class AnnouncementState {
   // Whether player p still owes a mandatory declaration this turn (the obliged
   // pagátultimó, or an 8/9 tarokk count after committing to a pagátultimó).
   bool HasPendingObligation(Player p) const;
+
+  // §5.5 public side-deduction. The side an as-yet-unrevealed announcer is
+  // assumed to take: that of the most recent speaker, or the declarer's side if
+  // nobody has spoken.
+  Side ConventionDefaultSide() const {
+    return last_speaker_side_.value_or(Side::kDeclarers);
+  }
+  // Whether p may make a side-carrying announcement (a bonus or a tarokk count)
+  // that is correctly attributed to its own side without first revealing it: its
+  // side is already public, or the convention default already matches it.
+  bool CanAnnounceForOwnSide(Player p) const;
+  // Record that p revealed its side by speaking, then re-run the deduction.
+  void RevealSide(Player p);
+  // Fill in sides that are now deducible by elimination (e.g. once the partner
+  // is identified the rest are defenders).
+  void DeducePublicSides();
   void EndTurn();
 
   std::vector<std::vector<Card>> hands_;
@@ -157,6 +175,13 @@ class AnnouncementState {
   // tarokk count if they hold 8/9 (C §4.1.3).
   std::array<bool, kNumPlayers> pagat_ulti_committed_;
   std::array<int, kNumPlayers> declared_tarokks_;  // 0, 8 or 9 (tarokkszám)
+  // §5.5 public side-deduction: each player's publicly-known side (nullopt = not
+  // yet deducible), whether a partner is publicly known to exist at all (false
+  // after a bare XX call, which may be a lone declarer), and the side of the most
+  // recent speaker (the convention base).
+  std::array<absl::optional<Side>, kNumPlayers> public_side_;
+  bool partner_known_to_exist_ = false;
+  absl::optional<Side> last_speaker_side_;
   bool spoke_this_turn_ = false;
   int consecutive_passes_ = 0;
   bool finished_ = false;

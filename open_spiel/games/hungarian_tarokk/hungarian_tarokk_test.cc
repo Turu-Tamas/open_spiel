@@ -511,8 +511,9 @@ void AnnouncementLogicTest() {
 
   // Both sides may announce the same bonus, each with its own kontra chain
   // (§5.2, §5.3). The declarer (side 0) announces trull; a defender (side 1)
-  // both announces its own trull and kontras the declarers' trull; the partner
-  // (side 0) may then rekontra its own and kontra the defenders'.
+  // must first reveal its side with a kontra before it may announce its own
+  // trull (§5.5); the partner (side 0) may then rekontra its own and kontra the
+  // defenders'.
   {
     AnnouncementState a(hands(2), 0, Bid::kThree, CalledCard::kNone);
     a.ApplyAction(CallActionForTarokk(kCardXX));  // P0 calls (partner P2)
@@ -521,16 +522,20 @@ void AnnouncementLogicTest() {
     a.ApplyAction(kActionAnnouncePass);       // P0 ends its turn
     SPIEL_CHECK_EQ(a.CurrentPlayer(), 1);     // a defender (side 1)
     std::vector<Action> legal = a.LegalActions();
-    // The defender may kontra the declarers' trull and the game, and may still
-    // announce its own trull.
+    // The defender may kontra the declarers' trull and the game, but not yet
+    // announce its own trull (its side is not public, and the convention would
+    // attribute the announcement to the declarer's side).
     SPIEL_CHECK_TRUE(
         Contains(legal, KontraClaimAction(Bonus::kTrull, Side::kDeclarers)));
     SPIEL_CHECK_TRUE(Contains(legal, kKontraActionBase + kGameKontraItem));
-    SPIEL_CHECK_TRUE(Contains(legal, AnnounceBonusAction(Bonus::kTrull)));
-    a.ApplyAction(
-        AnnounceBonusAction(Bonus::kTrull));  // P1: (trull, defenders)
+    SPIEL_CHECK_FALSE(Contains(legal, AnnounceBonusAction(Bonus::kTrull)));
+    // Kontra-ing reveals P1 as a defender; now it may announce its own trull.
     a.ApplyAction(
         KontraClaimAction(Bonus::kTrull, Side::kDeclarers));  // kontra P0's
+    SPIEL_CHECK_TRUE(a.PublicSide(1) == Side::kDefenders);
+    SPIEL_CHECK_TRUE(
+        Contains(a.LegalActions(), AnnounceBonusAction(Bonus::kTrull)));
+    a.ApplyAction(AnnounceBonusAction(Bonus::kTrull));  // P1: (trull, defenders)
     a.ApplyAction(kActionAnnouncePass);
     SPIEL_CHECK_EQ(a.CurrentPlayer(), 2);  // declarer's partner (side 0)
     std::vector<Action> legal2 = a.LegalActions();
@@ -540,6 +545,11 @@ void AnnouncementLogicTest() {
         Contains(legal2, KontraClaimAction(Bonus::kTrull, Side::kDeclarers)));
     SPIEL_CHECK_TRUE(
         Contains(legal2, KontraClaimAction(Bonus::kTrull, Side::kDefenders)));
+    // Rekontra-ing reveals P2 as the partner; P3 is then a defender by
+    // elimination (§5.5).
+    a.ApplyAction(KontraClaimAction(Bonus::kTrull, Side::kDeclarers));
+    SPIEL_CHECK_TRUE(a.PublicSide(2) == Side::kDeclarers);
+    SPIEL_CHECK_TRUE(a.PublicSide(3) == Side::kDefenders);
   }
 }
 
@@ -602,6 +612,75 @@ void MandatoryAnnouncementTest() {
   }
 }
 
+// Public side-deduction from the call and the announcements (§5.5).
+void PublicSideDeductionTest() {
+  // After an accepted cue bid (a forced call) the whole table is public from the
+  // start: the inviter is the publicly-known partner.
+  {
+    std::vector<std::vector<Card>> h(kNumPlayers);
+    h[0] = {SuitCard(kHearts, kLow)};  // declarer
+    h[1] = {kCardXIX};                 // the cue-bidder/partner holds the XIX
+    h[2] = {SuitCard(kHearts, kJack)};
+    h[3] = {SuitCard(kHearts, kRider)};
+    AnnouncementState a(h, /*declarer=*/0, Bid::kThree, CalledCard::kXIX);
+    a.ApplyAction(CallActionForTarokk(kCardXIX));  // forced call of the cued card
+    SPIEL_CHECK_EQ(a.Partner(), 1);
+    SPIEL_CHECK_TRUE(a.PublicSide(0) == Side::kDeclarers);
+    SPIEL_CHECK_TRUE(a.PublicSide(1) == Side::kDeclarers);
+    SPIEL_CHECK_TRUE(a.PublicSide(2) == Side::kDefenders);
+    SPIEL_CHECK_TRUE(a.PublicSide(3) == Side::kDefenders);
+  }
+
+  // Free call of a non-XX tarokk: a partner must exist (you may call yourself
+  // only with the XX), so once both defenders reveal themselves the hidden
+  // partner is deducible by elimination.
+  {
+    std::vector<std::vector<Card>> h(kNumPlayers);
+    h[0] = {kCardXX};                  // declarer holds the XX
+    h[1] = {SuitCard(kHearts, kLow)};
+    h[2] = {kCardXIX};                 // the partner holds the called XIX
+    h[3] = {SuitCard(kHearts, kRider)};
+    AnnouncementState a(h, /*declarer=*/0, Bid::kThree, CalledCard::kNone);
+    a.ApplyAction(CallActionForTarokk(kCardXIX));  // non-XX call -> partner exists
+    SPIEL_CHECK_EQ(a.Partner(), 2);
+    // Initially only the declarer's side is public.
+    SPIEL_CHECK_TRUE(a.PublicSide(0) == Side::kDeclarers);
+    SPIEL_CHECK_FALSE(a.PublicSide(1).has_value());
+    SPIEL_CHECK_FALSE(a.PublicSide(2).has_value());
+    SPIEL_CHECK_FALSE(a.PublicSide(3).has_value());
+    a.ApplyAction(kActionAnnouncePass);                  // P0 passes after calling
+    a.ApplyAction(kKontraActionBase + kGameKontraItem);  // P1 kontras -> defender
+    a.ApplyAction(kActionAnnouncePass);                  // P1 passes
+    a.ApplyAction(kActionAnnouncePass);                  // P2 (partner) passes
+    a.ApplyAction(AnnounceBonusAction(Bonus::kTrull));   // P3 reveals as defender
+    SPIEL_CHECK_TRUE(a.PublicSide(1) == Side::kDefenders);
+    SPIEL_CHECK_TRUE(a.PublicSide(3) == Side::kDefenders);
+    SPIEL_CHECK_TRUE(a.PublicSide(2) == Side::kDeclarers);  // by elimination
+  }
+
+  // A bare XX call may instead be a lone declarer, so revealing the same two
+  // defenders does NOT pin the third as a partner.
+  {
+    std::vector<std::vector<Card>> h(kNumPlayers);
+    h[0] = {SuitCard(kHearts, kLow)};  // declarer lacks the XX -> must call it
+    h[1] = {SuitCard(kHearts, kJack)};
+    h[2] = {kCardXX};                  // the actual partner holds the XX
+    h[3] = {SuitCard(kHearts, kRider)};
+    AnnouncementState a(h, /*declarer=*/0, Bid::kThree, CalledCard::kNone);
+    a.ApplyAction(CallActionForTarokk(kCardXX));         // bare XX call
+    SPIEL_CHECK_EQ(a.Partner(), 2);
+    a.ApplyAction(kActionAnnouncePass);                  // P0 passes
+    a.ApplyAction(kKontraActionBase + kGameKontraItem);  // P1 kontras -> defender
+    a.ApplyAction(kActionAnnouncePass);                  // P1 passes
+    a.ApplyAction(kActionAnnouncePass);                  // P2 passes
+    a.ApplyAction(AnnounceBonusAction(Bonus::kTrull));   // P3 reveals as defender
+    SPIEL_CHECK_TRUE(a.PublicSide(1) == Side::kDefenders);
+    SPIEL_CHECK_TRUE(a.PublicSide(3) == Side::kDefenders);
+    // P2 stays hidden: the declarer might be playing alone.
+    SPIEL_CHECK_FALSE(a.PublicSide(2).has_value());
+  }
+}
+
 }  // namespace
 }  // namespace hungarian_tarokk
 }  // namespace open_spiel
@@ -612,5 +691,6 @@ int main(int argc, char** argv) {
   open_spiel::hungarian_tarokk::TalonLogicTest();
   open_spiel::hungarian_tarokk::AnnouncementLogicTest();
   open_spiel::hungarian_tarokk::MandatoryAnnouncementTest();
+  open_spiel::hungarian_tarokk::PublicSideDeductionTest();
   open_spiel::hungarian_tarokk::BasicHungarianTarokkTests();
 }
