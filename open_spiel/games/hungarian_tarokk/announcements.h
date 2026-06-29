@@ -15,8 +15,8 @@
 // Simplifications for now (to be refined later, see rules.md):
 //   * sides are taken from the *actual* partnership (the engine knows who holds
 //     the called card) rather than from the public side-deduction of §5.5;
-//   * the tulétroá honour promises (§5.7) and the tarokk-count declaration
-//     (§5.4) are not modelled, and bonuses do not yet affect scoring;
+//   * the tulétroá honour promises (§5.7) are not modelled, and announced
+//     bonuses / tarokk declarations do not yet affect scoring;
 //   * calling a discarded tarokk (§4.3) is not handled.
 
 namespace open_spiel {
@@ -46,7 +46,8 @@ std::string BonusToString(Bonus bonus);
 //   announce bonus b             kAnnounceBonusBase + b     (114..119)
 //   kontra item i                kKontraActionBase + i      (120..132)
 //     (i = 0 is the game; i = 1 + 2*bonus + side is a (bonus, side) claim)
-//   pass                         kActionAnnouncePass        (133)
+//   declare 8 / 9 tarokks        kActionDeclareEight/Nine   (133, 134)
+//   pass                         kActionAnnouncePass        (135)
 inline constexpr Action kCallActionBase = kActionDeclineAnnul + 1;
 inline constexpr Action kAnnounceBonusBase = kCallActionBase + kNumTarokks;
 inline constexpr Action kKontraActionBase = kAnnounceBonusBase + kNumBonuses;
@@ -65,8 +66,11 @@ inline constexpr Bonus BonusForKontraItem(int item) {
 inline constexpr Side SideForKontraItem(int item) {
   return static_cast<Side>((item - 1) % 2);
 }
-inline constexpr Action kActionAnnouncePass =
+// 8/9 tarokk declarations (tarokkszám, §5.4), then the turn-ending pass.
+inline constexpr Action kActionDeclareEight =
     kKontraActionBase + kNumKontraItems;
+inline constexpr Action kActionDeclareNine = kActionDeclareEight + 1;
+inline constexpr Action kActionAnnouncePass = kActionDeclareNine + 1;
 inline constexpr Action kLastAnnounceAction = kActionAnnouncePass;
 
 inline bool IsCallAction(Action a) {
@@ -93,14 +97,20 @@ inline Action AnnounceBonusAction(Bonus b) {
 inline Action KontraClaimAction(Bonus b, Side side) {
   return kKontraActionBase + KontraItemForBonus(b, side);
 }
+inline bool IsTarokkDeclareAction(Action a) {
+  return a == kActionDeclareEight || a == kActionDeclareNine;
+}
 
 class AnnouncementState {
  public:
   AnnouncementState() = default;
   // `hands` are the players' (post-skart) nine-card hands; `obligatory` is the
   // card the auction forces the declarer to call (kNone = free choice).
+  // `pagat_ulti_player` (kInvalidPlayer if none) is the cue-bidder who must
+  // announce pagátultimó (C §5.2.2), decided during the auction.
   AnnouncementState(std::vector<std::vector<Card>> hands, Player declarer,
-                    Bid bid, CalledCard obligatory);
+                    Bid bid, CalledCard obligatory,
+                    Player pagat_ulti_player = kInvalidPlayer);
 
   Player CurrentPlayer() const { return current_player_; }
   std::vector<Action> LegalActions() const;
@@ -111,6 +121,8 @@ class AnnouncementState {
   // The holder of the called tarokk, or kInvalidPlayer if the declarer called
   // their own XX (playing alone).
   Player Partner() const { return partner_; }
+  // The tarokk count (0, 8 or 9) a player declared (tarokkszám, §5.4).
+  int DeclaredTarokks(Player p) const { return declared_tarokks_[p]; }
 
   std::string ToString() const;  // public log (does not reveal the partner)
 
@@ -122,12 +134,17 @@ class AnnouncementState {
   bool BonusAnnounceable(int bonus, Player p) const;
   // The side allowed to raise item `i`'s kontra next, or nullopt if none.
   absl::optional<Side> KontraRaiserSide(int item) const;
+  // Whether player p still owes a mandatory declaration this turn (the obliged
+  // pagátultimó, or an 8/9 tarokk count after committing to a pagátultimó).
+  bool HasPendingObligation(Player p) const;
   void EndTurn();
 
   std::vector<std::vector<Card>> hands_;
   Player declarer_ = kInvalidPlayer;
   Bid bid_;
   CalledCard obligatory_;
+  // The cue-bidder obliged to announce pagátultimó (kInvalidPlayer if none).
+  Player pagat_ulti_player_ = kInvalidPlayer;
 
   Player current_player_ = kInvalidPlayer;
   Card called_card_ = kInvalidCard;
@@ -136,6 +153,10 @@ class AnnouncementState {
   // announce the same bonus independently (§5.2).
   std::array<std::array<bool, 2>, kNumBonuses> bonus_announced_;
   std::array<int, kNumKontraItems> kontra_level_;  // 0 .. kMaxKontra
+  // Players who announced or kontra'd a pagátultimó: they must declare their
+  // tarokk count if they hold 8/9 (C §4.1.3).
+  std::array<bool, kNumPlayers> pagat_ulti_committed_;
+  std::array<int, kNumPlayers> declared_tarokks_;  // 0, 8 or 9 (tarokkszám)
   bool spoke_this_turn_ = false;
   int consecutive_passes_ = 0;
   bool finished_ = false;

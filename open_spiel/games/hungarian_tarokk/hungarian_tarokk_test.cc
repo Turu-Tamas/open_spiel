@@ -241,6 +241,70 @@ void BiddingLogicTest() {
     SPIEL_CHECK_EQ(b.Declarer(), 3);
     SPIEL_CHECK_TRUE(b.WinningBid() == Bid::kThree);
   }
+
+  // An accepted invite by a cue-bidder whose only honour is the pagát obliges
+  // pagátultimó (C §5.2.2): P0 invites with the XIX but P2 wins and calls it
+  // in.
+  {
+    std::vector<PlayerBidInfo> info =
+        FourHonours();  // each holds only the pagát
+    info[0].has_xix = true;
+    BiddingState b(info);
+    b.ApplyAction(kActionBidTwo);   // P0 cue bids the XIX
+    b.ApplyAction(kActionBidOne);   // P1 overcalls
+    b.ApplyAction(kActionBidSolo);  // P2 overcalls
+    b.ApplyAction(kActionPass);     // P3 passes
+    b.ApplyAction(kActionPass);     // P1 passes; P2 wins (accepts the invite)
+    SPIEL_CHECK_TRUE(b.IsFinished());
+    SPIEL_CHECK_EQ(b.Declarer(), 2);
+    SPIEL_CHECK_EQ(b.CueBidder(), 0);
+    SPIEL_CHECK_TRUE(b.PagatUltiObligation());
+  }
+
+  // The cue-bidder winning its own invite carries no obligation: with nobody to
+  // accept it, P0 takes the contract and owes no pagátultimó.
+  {
+    std::vector<PlayerBidInfo> info = FourHonours();
+    info[0].has_xix = true;
+    BiddingState b(info);
+    b.ApplyAction(kActionBidTwo);  // P0 cue bids the XIX
+    b.ApplyAction(kActionPass);    // P1
+    b.ApplyAction(kActionPass);    // P2
+    b.ApplyAction(kActionPass);    // P3 -> P0 wins its own invite
+    SPIEL_CHECK_TRUE(b.IsFinished());
+    SPIEL_CHECK_EQ(b.Declarer(), 0);
+    SPIEL_CHECK_EQ(b.CueBidder(), 0);
+    SPIEL_CHECK_EQ(CalledCard::kNone, b.ObligatoryCalledCard());
+    SPIEL_CHECK_FALSE(b.PagatUltiObligation());
+  }
+
+  // An accepted invite carries no obligation if the cue-bidder also has a high
+  // honour.
+  {
+    std::vector<PlayerBidInfo> info = FourHonours();
+    info[0].has_xix = true;
+    info[0].has_high_honour = true;  // P0 also holds the XXI or the Skíz
+    BiddingState b(info);
+    b.ApplyAction(kActionBidTwo);   // P0 cue bids the XIX
+    b.ApplyAction(kActionBidOne);   // P1 overcalls
+    b.ApplyAction(kActionBidSolo);  // P2 overcalls
+    b.ApplyAction(kActionPass);     // P3
+    b.ApplyAction(kActionPass);     // P1 passes; P2 wins
+    SPIEL_CHECK_EQ(b.Declarer(), 2);
+    SPIEL_CHECK_FALSE(b.PagatUltiObligation());
+  }
+
+  // A plain (non-cue) bid never obliges pagátultimó.
+  {
+    BiddingState b(FourHonours());
+    b.ApplyAction(kActionBidThree);  // plain three
+    b.ApplyAction(kActionPass);
+    b.ApplyAction(kActionPass);
+    b.ApplyAction(kActionPass);
+    b.ApplyAction(kActionPass);  // P0 keeps the three and wins
+    SPIEL_CHECK_TRUE(b.IsFinished());
+    SPIEL_CHECK_FALSE(b.PagatUltiObligation());
+  }
 }
 
 // The card helpers used by discarding and annulment (rules.md §4).
@@ -432,8 +496,8 @@ void AnnouncementLogicTest() {
     SPIEL_CHECK_EQ(expected, a.LegalActions());
   }
 
-  // The declarer holds the XX and XIX: it may call the highest tarokk below the XX that
-  // it does not hold (the XVIII here), or its own XX to play alone.
+  // The declarer holds the XX and XIX: it may call the highest tarokk below the
+  // XX that it does not hold (the XVIII here), or its own XX to play alone.
   {
     std::vector<std::vector<Card>> h = hands(0);
     h[0].push_back(kCardXIX);
@@ -479,6 +543,65 @@ void AnnouncementLogicTest() {
   }
 }
 
+// The mandatory pagátultimó (C §5.2.2) and the 8/9 tarokk declaration (§5.4).
+void MandatoryAnnouncementTest() {
+  // The obliged cue-bidder may be the partner; the obligation fires on its own
+  // turn (and it holds too few tarokks to declare, so only the ulti is owed).
+  {
+    std::vector<std::vector<Card>> h(kNumPlayers);
+    h[0] = {SuitCard(kHearts, kLow)};  // declarer (forced to call the XX)
+    h[1] = {SuitCard(kHearts, kJack)};
+    h[2] = {kCardXX, kCardPagat, Tarokk(2)};  // partner; only 3 tarokks
+    h[3] = {SuitCard(kHearts, kRider)};
+    AnnouncementState a(h, /*declarer=*/0, Bid::kTwo, CalledCard::kXX,
+                        /*pagat_ulti_player=*/2);
+    a.ApplyAction(
+        CallActionForTarokk(kCardXX));  // declarer calls -> partner P2
+    SPIEL_CHECK_EQ(a.Partner(), 2);
+    a.ApplyAction(kActionAnnouncePass);  // declarer (not obliged) passes
+    SPIEL_CHECK_EQ(a.CurrentPlayer(), 1);
+    SPIEL_CHECK_TRUE(
+        Contains(a.LegalActions(), kActionAnnouncePass));  // P1 free
+    a.ApplyAction(kActionAnnouncePass);                    // defender P1 passes
+    SPIEL_CHECK_EQ(a.CurrentPlayer(), 2);
+    std::vector<Action> legal = a.LegalActions();  // P2 obliged
+    SPIEL_CHECK_TRUE(Contains(legal, AnnounceBonusAction(Bonus::kPagatUlti)));
+    SPIEL_CHECK_FALSE(Contains(legal, kActionAnnouncePass));
+    a.ApplyAction(AnnounceBonusAction(Bonus::kPagatUlti));
+    SPIEL_CHECK_TRUE(
+        Contains(a.LegalActions(), kActionAnnouncePass));  // <8 tarokks
+  }
+
+  // A defender that kontras a pagátultimó must also declare its 8/9 (C §4.1.3);
+  // here it holds eight tarokks, so eight is owed (and nine is never offered).
+  {
+    std::vector<std::vector<Card>> h(kNumPlayers);
+    h[0] = {kCardXX};  // declarer
+    h[1] = {Tarokk(1), Tarokk(2), Tarokk(3), Tarokk(4),
+            Tarokk(5), Tarokk(6), Tarokk(7), Tarokk(8)};  // defender, 8 tarokks
+    h[2] = {SuitCard(kHearts, kJack)};
+    h[3] = {SuitCard(kHearts, kRider)};
+    AnnouncementState a(h, /*declarer=*/0, Bid::kThree, CalledCard::kNone);
+    a.ApplyAction(CallActionForTarokk(kCardXX));  // play alone (own XX)
+    SPIEL_CHECK_EQ(a.Partner(), kInvalidPlayer);
+    a.ApplyAction(
+        AnnounceBonusAction(Bonus::kPagatUlti));  // declarer announces
+    a.ApplyAction(kActionAnnouncePass);
+    SPIEL_CHECK_EQ(a.CurrentPlayer(), 1);  // the defender
+    a.ApplyAction(KontraClaimAction(Bonus::kPagatUlti, Side::kDeclarers));
+    std::vector<Action> legal = a.LegalActions();
+    SPIEL_CHECK_TRUE(
+        Contains(legal, kActionDeclareEight));  // must declare eight
+    SPIEL_CHECK_FALSE(Contains(legal, kActionDeclareNine));
+    SPIEL_CHECK_FALSE(
+        Contains(legal, kActionAnnouncePass));  // may not pass yet
+    a.ApplyAction(kActionDeclareEight);
+    SPIEL_CHECK_EQ(a.DeclaredTarokks(1), 8);
+    SPIEL_CHECK_TRUE(
+        Contains(a.LegalActions(), kActionAnnouncePass));  // free now
+  }
+}
+
 }  // namespace
 }  // namespace hungarian_tarokk
 }  // namespace open_spiel
@@ -488,5 +611,6 @@ int main(int argc, char** argv) {
   open_spiel::hungarian_tarokk::CardHelperTest();
   open_spiel::hungarian_tarokk::TalonLogicTest();
   open_spiel::hungarian_tarokk::AnnouncementLogicTest();
+  open_spiel::hungarian_tarokk::MandatoryAnnouncementTest();
   open_spiel::hungarian_tarokk::BasicHungarianTarokkTests();
 }

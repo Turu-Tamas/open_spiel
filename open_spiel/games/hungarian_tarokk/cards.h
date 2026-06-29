@@ -79,6 +79,7 @@ int CardRank(Card card);
 // (Skíz, XXI, pagát) 5, every other tarokk 1.
 int CardPoints(Card card);
 bool HandHasCard(const std::vector<Card>& hand, Card card);
+int CountTarokks(const std::vector<Card>& hand);
 bool HandHasHonour(const std::vector<Card>& hand);
 // High honours are the XXI and the Skíz.
 bool HandHasHighHonour(const std::vector<Card>& hand);

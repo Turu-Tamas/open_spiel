@@ -51,20 +51,26 @@ std::string AnnouncementActionToString(Action action) {
         "Kontra ", BonusToString(bonus),
         side == Side::kDeclarers ? " (declarers')" : " (defenders')");
   }
+  if (action == kActionDeclareEight) return "Declare8Tarokks";
+  if (action == kActionDeclareNine) return "Declare9Tarokks";
   if (action == kActionAnnouncePass) return "Pass";
   SpielFatalError(absl::StrCat("Not an announcement action: ", action));
 }
 
 AnnouncementState::AnnouncementState(std::vector<std::vector<Card>> hands,
                                      Player declarer, Bid bid,
-                                     CalledCard obligatory)
+                                     CalledCard obligatory,
+                                     Player pagat_ulti_player)
     : hands_(std::move(hands)),
       declarer_(declarer),
       bid_(bid),
       obligatory_(obligatory),
+      pagat_ulti_player_(pagat_ulti_player),
       current_player_(declarer) {
   for (std::array<bool, 2>& sides : bonus_announced_) sides.fill(false);
   kontra_level_.fill(0);
+  pagat_ulti_committed_.fill(false);
+  declared_tarokks_.fill(0);
 }
 
 Side AnnouncementState::SideOf(Player p) const {
@@ -130,13 +136,32 @@ absl::optional<Side> AnnouncementState::KontraRaiserSide(int item) const {
   return (level % 2 == 0) ? Opponent(owner) : owner;
 }
 
+bool AnnouncementState::HasPendingObligation(Player p) const {
+  // The cue-bidder whose only honour is the pagát must announce pagátultimó
+  // (C §5.2.2): until its side has, the player may not end its turn.
+  const int ulti = static_cast<int>(Bonus::kPagatUlti);
+  if (p == pagat_ulti_player_ &&
+      !bonus_announced_[ulti][static_cast<int>(SideOf(p))]) {
+    return true;
+  }
+  // Having announced or kontra'd a pagátultimó, a player must declare its 8/9
+  // tarokks if it holds them before passing.
+  if (pagat_ulti_committed_[p] && declared_tarokks_[p] == 0 &&
+      CountTarokks(hands_[p]) >= 8) {
+    return true;
+  }
+  return false;
+}
+
 std::vector<Action> AnnouncementState::LegalActions() const {
   SPIEL_CHECK_FALSE(finished_);
   Player p = current_player_;
   // The declarer must call a partner before anything else.
   if (p == declarer_ && called_card_ == kInvalidCard) return LegalCalls();
 
-  std::vector<Action> legal = {kActionAnnouncePass};
+  std::vector<Action> legal;
+  // Pass ends the turn -- forbidden while a mandatory declaration is still owed
+  if (!HasPendingObligation(p)) legal.push_back(kActionAnnouncePass);
   for (int b = 0; b < kNumBonuses; ++b) {
     if (BonusAnnounceable(b, p))
       legal.push_back(AnnounceBonusAction(static_cast<Bonus>(b)));
@@ -149,6 +174,12 @@ std::vector<Action> AnnouncementState::LegalActions() const {
       legal.push_back(
           KontraClaimAction(BonusForKontraItem(i), SideForKontraItem(i)));
     }
+  }
+  // A player holding 8/9 tarokks may declare their tarokk count
+  if (declared_tarokks_[p] == 0) {
+    const int n = CountTarokks(hands_[p]);
+    if (n == 9) legal.push_back(kActionDeclareNine);
+    else if (n == 8) legal.push_back(kActionDeclareEight);
   }
   std::sort(legal.begin(), legal.end());
   return legal;
@@ -174,11 +205,24 @@ void AnnouncementState::ApplyAction(Action action) {
   if (IsAnnounceBonusAction(action)) {
     const int bonus = action - kAnnounceBonusBase;
     bonus_announced_[bonus][static_cast<int>(SideOf(p))] = true;
+    if (bonus == static_cast<int>(Bonus::kPagatUlti)) {
+      pagat_ulti_committed_[p] = true;  // must now declare 8/9 if held
+    }
     spoke_this_turn_ = true;
     return;
   }
   if (IsKontraAction(action)) {
-    kontra_level_[action - kKontraActionBase] += 1;
+    const int item = action - kKontraActionBase;
+    kontra_level_[item] += 1;
+    if (item != kGameKontraItem &&
+        BonusForKontraItem(item) == Bonus::kPagatUlti) {
+      pagat_ulti_committed_[p] = true;  // kontra-ing ulti also forces 8/9
+    }
+    spoke_this_turn_ = true;
+    return;
+  }
+  if (IsTarokkDeclareAction(action)) {
+    declared_tarokks_[p] = (action == kActionDeclareNine) ? 9 : 8;
     spoke_this_turn_ = true;
     return;
   }

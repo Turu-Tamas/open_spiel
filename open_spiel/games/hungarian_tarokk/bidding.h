@@ -27,6 +27,7 @@ std::string BidToString(Bid bid);
 // The tarokk that a cue bid or a yield obliges the declarer to call.
 enum class CalledCard { kNone, kXIX, kXVIII, kXX };
 std::string CalledCardToString(CalledCard card);
+std::ostream& operator<<(std::ostream& os, CalledCard card);
 
 struct PlayerBidInfo {
   bool has_honour = false;       // pagát, XXI or the Skíz
@@ -77,6 +78,13 @@ class BiddingState {
   CalledCard CuedCard() const { return cued_card_; }
   bool Yielded() const { return yielded_; }
   CalledCard ObligatoryCalledCard() const { return obligatory_called_card_; }
+  // True (once finished) if an *accepted* invite obliges pagátultimó (C §5.2.2):
+  // a cue bid by a player whose only honour is the pagát, where the cue-bidder
+  // did not win the auction (so the winner is forced to call them in). If the
+  // cue-bidder wins outright the invite is not accepted and there is no
+  // obligation. Decided from the bidding-time hand, so a high honour later drawn
+  // from the talon does not lift it.
+  bool PagatUltiObligation() const { return pagat_ulti_obligation_; }
 
   std::string ToString() const;
 
@@ -115,6 +123,7 @@ class BiddingState {
   Player declarer_ = kInvalidPlayer;
   Bid winning_bid_ = Bid::kThree;
   CalledCard obligatory_called_card_ = CalledCard::kNone;
+  bool pagat_ulti_obligation_ = false;
   std::vector<std::pair<Player, Action>> calls_;  // public log, for ToString()
 };
 

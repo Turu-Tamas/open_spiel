@@ -56,6 +56,9 @@ std::string CalledCardToString(CalledCard card) {
   }
   SpielFatalError("Unknown called card.");
 }
+std::ostream& operator<<(std::ostream& os, CalledCard card) {
+  return os << CalledCardToString(card);
+}
 
 Action BidToAction(Bid bid) { return kActionBidThree + BidStrength(bid); }
 
@@ -301,6 +304,12 @@ void BiddingState::Finish(Player winner, Bid bid) {
   } else {
     obligatory_called_card_ = CalledCard::kNone;
   }
+  // An *accepted* invite (the cue-bidder did not win, so the winner must call
+  // them) by a player whose only honour is the pagát obliges pagátultimó
+  // (C §5.2.2). A cue-bidder who wins its own invite is not obliged.
+  pagat_ulti_obligation_ = cue_bidder_ != kInvalidPlayer &&
+                           cue_bidder_ != declarer_ &&
+                           !info_[cue_bidder_].has_high_honour;
 }
 
 std::string BiddingState::ToString() const {

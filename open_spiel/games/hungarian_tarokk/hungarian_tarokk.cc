@@ -213,9 +213,12 @@ void HungarianTarokkState::DoApplyAction(Action action_id) {
         for (int p = 0; p < kNumPlayers; ++p) {
           for (Card c : discarded_[p]) collected_points_[p] += CardPoints(c);
         }
-        announcements_ =
-            AnnouncementState(players_cards_, declarer_, winning_bid_,
-                              bidding_.ObligatoryCalledCard());
+        const Player ulti_player = bidding_.PagatUltiObligation()
+                                       ? bidding_.CueBidder()
+                                       : kInvalidPlayer;
+        announcements_ = AnnouncementState(
+            players_cards_, declarer_, winning_bid_,
+            bidding_.ObligatoryCalledCard(), ulti_player);
         phase_ = Phase::kAnnouncements;
       }
     }

@@ -68,6 +68,14 @@ bool HandHasCard(const std::vector<Card>& hand, Card card) {
   return false;
 }
 
+int CountTarokks(const std::vector<Card>& hand) {
+  int n = 0;
+  for (Card c : hand) {
+    if (IsTarokk(c)) ++n;
+  }
+  return n;
+}
+
 bool HandHasHonour(const std::vector<Card>& hand) {
   return HandHasCard(hand, kCardPagat) || HandHasCard(hand, kCardXXI) ||
          HandHasCard(hand, kCardSkiz);
