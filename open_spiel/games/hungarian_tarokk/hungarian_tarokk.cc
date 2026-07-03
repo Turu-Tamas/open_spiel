@@ -218,7 +218,7 @@ void HungarianTarokkState::DoApplyAction(Action action_id) {
                                        : kInvalidPlayer;
         announcements_ = AnnouncementState(
             players_cards_, declarer_, winning_bid_,
-            bidding_.ObligatoryCalledCard(), ulti_player);
+            bidding_.ObligatoryCalledCard(), ulti_player, discarded_);
         phase_ = Phase::kAnnouncements;
       }
     }

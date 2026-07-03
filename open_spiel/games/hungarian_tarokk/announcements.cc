@@ -60,19 +60,32 @@ std::string AnnouncementActionToString(Action action) {
 AnnouncementState::AnnouncementState(std::vector<std::vector<Card>> hands,
                                      Player declarer, Bid bid,
                                      CalledCard obligatory,
-                                     Player pagat_ulti_player)
+                                     Player pagat_ulti_player,
+                                     std::vector<std::vector<Card>> discards)
     : hands_(std::move(hands)),
+      discards_(std::move(discards)),
       declarer_(declarer),
       bid_(bid),
       obligatory_(obligatory),
       pagat_ulti_player_(pagat_ulti_player),
       current_player_(declarer) {
+  if (discards_.empty()) discards_.resize(kNumPlayers);  // no skart given
   for (std::array<bool, 2>& sides : bonus_announced_) sides.fill(false);
   kontra_level_.fill(0);
   pagat_ulti_committed_.fill(false);
   declared_tarokks_.fill(0);
   public_side_.fill(absl::nullopt);
   public_side_[declarer_] = Side::kDeclarers;  // the declarer's side is public
+}
+
+bool AnnouncementState::NonDeclarerDiscardedTarokk() const {
+  for (Player q = 0; q < kNumPlayers; ++q) {
+    if (q == declarer_) continue;
+    for (Card c : discards_[q]) {
+      if (IsTarokk(c)) return true;
+    }
+  }
+  return false;
 }
 
 Side AnnouncementState::SideOf(Player p) const {
@@ -90,10 +103,32 @@ std::vector<Action> AnnouncementState::LegalCalls() const {
 
   const std::vector<Card>& dh = hands_[declarer_];
   if (!HandHasCard(dh, kCardXX)) {
-    return {CallActionForTarokk(kCardXX)};  // the normal call
+    // The declarer lacks the XX, so calls it. (The XX may never be discarded, so
+    // its holder is always a current hand -- a real partner.)
+    return {CallActionForTarokk(kCardXX)};
   }
-  // The declarer holds the XX: call the highest tarokk below it that they do
-  // not hold, or call their own XX to play alone.
+
+  // The declarer holds the XX.
+  if (NonDeclarerDiscardedTarokk()) {
+    // §6.5: with a tarokk in the skart the declarer may call any tarokk except an
+    // honour, one it holds itself (you call yourself only with the XX), or one it
+    // discarded -- so it may call a tarokk a defender laid away (§4.3). It may
+    // still call its own XX to play alone.
+    std::vector<Action> calls;
+    for (int t = 0; t < kNumTarokks; ++t) {
+      const Card c{t};
+      if (c == kCardPagat || c == kCardXXI || c == kCardSkiz) continue;
+      if (HandHasCard(dh, c)) continue;
+      if (HandHasCard(discards_[declarer_], c)) continue;
+      calls.push_back(CallActionForTarokk(c));
+    }
+    calls.push_back(CallActionForTarokk(kCardXX));  // own XX -> play alone
+    std::sort(calls.begin(), calls.end());
+    return calls;
+  }
+
+  // Otherwise: call the highest tarokk below the XX it does not hold, or its own
+  // XX to play alone.
   Card highest_below = kInvalidCard;
   for (int t = kCardXX.index - 1; t >= 0; --t) {
     if (!HandHasCard(dh, Card{t})) {
@@ -247,19 +282,41 @@ void AnnouncementState::ApplyAction(Action action) {
   if (IsCallAction(action)) {
     called_card_ = TarokkForCallAction(action);
     partner_ = kInvalidPlayer;
+    hivatalbol_kontra_player_ = kInvalidPlayer;
     for (Player q = 0; q < kNumPlayers; ++q) {
       if (q != declarer_ && HandHasCard(hands_[q], called_card_)) {
-        partner_ = q;  // (none holds it -> the declarer called their own XX)
+        partner_ = q;  // (none holds it -> own XX, or a discarded tarokk)
         break;
       }
     }
+    if (partner_ == kInvalidPlayer) {
+      // The called card is in no hand: either the declarer called its own XX to
+      // play alone, or it called a tarokk a defender discarded (§4.3). In the
+      // latter case the discarder kontras the game "by office" (hivatalból
+      // kontra) -- applied automatically here, not as a player action.
+      for (Player q = 0; q < kNumPlayers; ++q) {
+        if (q != declarer_ && HandHasCard(discards_[q], called_card_)) {
+          hivatalbol_kontra_player_ = q;
+          kontra_level_[kGameKontraItem] += 1;  // the automatic by-office kontra
+          break;
+        }
+      }
+    }
     // §5.5 public side-deduction from the call.
-    if (obligatory_ != CalledCard::kNone) {
+    if (hivatalbol_kontra_player_ != kInvalidPlayer) {
+      // A discarded tarokk was called: the declarer plays alone and the table
+      // learns it (the by-office kontra is public), so every non-declarer is a
+      // known defender.
+      partner_known_to_exist_ = false;
+      for (Player q = 0; q < kNumPlayers; ++q) {
+        if (q != declarer_) public_side_[q] = Side::kDefenders;
+      }
+      last_speaker_side_ = Side::kDefenders;
+    } else if (obligatory_ != CalledCard::kNone) {
       // A forced call (an accepted cue bid, or a yield) names the publicly-known
       // inviter as the partner, so the whole table's sides become public.
       partner_known_to_exist_ = true;
       if (partner_ != kInvalidPlayer) public_side_[partner_] = Side::kDeclarers;
-      DeducePublicSides();
     } else if (called_card_ == kCardXX) {
       // A bare XX call may instead be the declarer calling itself to play alone,
       // so the public does not yet know a partner exists.
@@ -269,6 +326,7 @@ void AnnouncementState::ApplyAction(Action action) {
       // with the XX), though its identity stays hidden for now.
       partner_known_to_exist_ = true;
     }
+    DeducePublicSides();
     spoke_this_turn_ = true;
     return;  // still the declarer's turn
   }
@@ -328,7 +386,14 @@ std::string AnnouncementState::ToString() const {
     parts.push_back(absl::StrCat("P", call.first, ":",
                                  AnnouncementActionToString(call.second)));
   }
-  return absl::StrJoin(parts, " ");
+  std::string str = absl::StrJoin(parts, " ");
+  // The hivatalból kontra is automatic (not a logged action); surface it here so
+  // it shows up in observations (§4.3).
+  if (hivatalbol_kontra_player_ != kInvalidPlayer) {
+    absl::StrAppend(&str, str.empty() ? "" : " ", "[hivatalbol kontra by P",
+                    hivatalbol_kontra_player_, "]");
+  }
+  return str;
 }
 
 }  // namespace hungarian_tarokk

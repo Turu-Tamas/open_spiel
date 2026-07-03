@@ -681,6 +681,65 @@ void PublicSideDeductionTest() {
   }
 }
 
+// Calling a tarokk a defender discarded (§4.3, §6.5) and the automatic
+// "hivatalból kontra".
+void DiscardedTarokkCallTest() {
+  // The declarer holds the XX and defender P2 laid an ordinary tarokk away. Under
+  // §6.5 the declarer may call that discarded tarokk; doing so makes it play
+  // alone and forces P2's by-office kontra of the game.
+  {
+    std::vector<std::vector<Card>> hands(kNumPlayers);
+    hands[0] = {kCardXX, Tarokk(2), Tarokk(3)};  // declarer holds the XX
+    hands[1] = {SuitCard(kHearts, kLow)};
+    hands[2] = {SuitCard(kHearts, kJack)};
+    hands[3] = {SuitCard(kHearts, kRider)};
+    std::vector<std::vector<Card>> discards(kNumPlayers);
+    discards[2] = {Tarokk(5)};  // P2 discarded the V (an ordinary tarokk)
+
+    AnnouncementState a(hands, /*declarer=*/0, Bid::kThree, CalledCard::kNone,
+                        /*pagat_ulti_player=*/kInvalidPlayer, discards);
+    std::vector<Action> legal = a.LegalActions();
+    // The §6.5 free call offers the discarded V and the declarer's own XX, but
+    // never an honour or a card the declarer holds.
+    SPIEL_CHECK_TRUE(Contains(legal, CallActionForTarokk(Tarokk(5))));
+    SPIEL_CHECK_TRUE(Contains(legal, CallActionForTarokk(kCardXX)));
+    SPIEL_CHECK_FALSE(Contains(legal, CallActionForTarokk(kCardPagat)));  // honour
+    SPIEL_CHECK_FALSE(Contains(legal, CallActionForTarokk(Tarokk(2))));   // in hand
+
+    a.ApplyAction(CallActionForTarokk(Tarokk(5)));  // call the discarded tarokk
+    SPIEL_CHECK_EQ(a.Partner(), kInvalidPlayer);          // declarer plays alone
+    SPIEL_CHECK_EQ(a.HivatalbolKontraPlayer(), 2);        // the discarder, P2
+    // The whole table is public: the lone declarer against three defenders.
+    SPIEL_CHECK_TRUE(a.PublicSide(0) == Side::kDeclarers);
+    SPIEL_CHECK_TRUE(a.PublicSide(1) == Side::kDefenders);
+    SPIEL_CHECK_TRUE(a.PublicSide(2) == Side::kDefenders);
+    SPIEL_CHECK_TRUE(a.PublicSide(3) == Side::kDefenders);
+    // The game is already kontra'd by office, so the declarer's side may rekontra
+    // it (and no defender may kontra it again).
+    SPIEL_CHECK_TRUE(
+        Contains(a.LegalActions(), kKontraActionBase + kGameKontraItem));
+  }
+
+  // Calling a tarokk a defender holds in hand (not discarded) is an ordinary
+  // partner call -- no play-alone, no hivatalból kontra.
+  {
+    std::vector<std::vector<Card>> hands(kNumPlayers);
+    hands[0] = {kCardXX, Tarokk(2), Tarokk(3)};
+    hands[1] = {SuitCard(kHearts, kLow)};
+    hands[2] = {Tarokk(7)};  // P2 holds the VII in hand
+    hands[3] = {SuitCard(kHearts, kRider)};
+    std::vector<std::vector<Card>> discards(kNumPlayers);
+    discards[1] = {Tarokk(5)};  // some defender discarded a tarokk (enables §6.5)
+
+    AnnouncementState a(hands, 0, Bid::kThree, CalledCard::kNone, kInvalidPlayer,
+                        discards);
+    SPIEL_CHECK_TRUE(Contains(a.LegalActions(), CallActionForTarokk(Tarokk(7))));
+    a.ApplyAction(CallActionForTarokk(Tarokk(7)));  // P2 holds it -> partner
+    SPIEL_CHECK_EQ(a.Partner(), 2);
+    SPIEL_CHECK_EQ(a.HivatalbolKontraPlayer(), kInvalidPlayer);
+  }
+}
+
 }  // namespace
 }  // namespace hungarian_tarokk
 }  // namespace open_spiel
@@ -692,5 +751,6 @@ int main(int argc, char** argv) {
   open_spiel::hungarian_tarokk::AnnouncementLogicTest();
   open_spiel::hungarian_tarokk::MandatoryAnnouncementTest();
   open_spiel::hungarian_tarokk::PublicSideDeductionTest();
+  open_spiel::hungarian_tarokk::DiscardedTarokkCallTest();
   open_spiel::hungarian_tarokk::BasicHungarianTarokkTests();
 }

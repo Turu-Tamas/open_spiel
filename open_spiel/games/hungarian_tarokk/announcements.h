@@ -103,13 +103,15 @@ inline bool IsTarokkDeclareAction(Action a) {
 class AnnouncementState {
  public:
   AnnouncementState() = default;
-  // `hands` are the players' (post-skart) nine-card hands; `obligatory` is the
-  // card the auction forces the declarer to call (kNone = free choice).
+  // `hands` are the players' (post-skart) nine-card hands and `discards` their
+  // skart (used to call a discarded tarokk, §4.3); `obligatory` is the card the
+  // auction forces the declarer to call (kNone = free choice).
   // `pagat_ulti_player` (kInvalidPlayer if none) is the cue-bidder who must
   // announce pagátultimó (C §5.2.2), decided during the auction.
   AnnouncementState(std::vector<std::vector<Card>> hands, Player declarer,
                     Bid bid, CalledCard obligatory,
-                    Player pagat_ulti_player = kInvalidPlayer);
+                    Player pagat_ulti_player = kInvalidPlayer,
+                    std::vector<std::vector<Card>> discards = {});
 
   Player CurrentPlayer() const { return current_player_; }
   std::vector<Action> LegalActions() const;
@@ -125,6 +127,10 @@ class AnnouncementState {
   // The side a player is publicly known to be on, or nullopt if it cannot yet be
   // deduced from the call and the announcements so far (§5.5).
   absl::optional<Side> PublicSide(Player p) const { return public_side_[p]; }
+  // The player who, having discarded the called tarokk, kontra'd the game "by
+  // office" (hivatalból kontra, §4.3); kInvalidPlayer if no discarded tarokk was
+  // called. This kontra is automatic, not a player action.
+  Player HivatalbolKontraPlayer() const { return hivatalbol_kontra_player_; }
 
   std::string ToString() const;  // public log (does not reveal the partner)
 
@@ -133,6 +139,9 @@ class AnnouncementState {
 
   Side SideOf(Player p) const;
   std::vector<Action> LegalCalls() const;
+  // Whether any non-declarer put a tarokk in its skart, enabling the §6.5 free
+  // call (declarer holding the XX may then call almost any tarokk).
+  bool NonDeclarerDiscardedTarokk() const;
   bool BonusAnnounceable(int bonus, Player p) const;
   // The side allowed to raise item `i`'s kontra next, or nullopt if none.
   absl::optional<Side> KontraRaiserSide(int item) const;
@@ -158,6 +167,7 @@ class AnnouncementState {
   void EndTurn();
 
   std::vector<std::vector<Card>> hands_;
+  std::vector<std::vector<Card>> discards_;  // each player's skart (§4.3)
   Player declarer_ = kInvalidPlayer;
   Bid bid_;
   CalledCard obligatory_;
@@ -167,6 +177,9 @@ class AnnouncementState {
   Player current_player_ = kInvalidPlayer;
   Card called_card_ = kInvalidCard;
   Player partner_ = kInvalidPlayer;
+  // The player who kontra'd the game by office after the declarer called the
+  // tarokk it had discarded (hivatalból kontra, §4.3); kInvalidPlayer if none.
+  Player hivatalbol_kontra_player_ = kInvalidPlayer;
   // Which sides have announced each bonus ([bonus][side]); both sides may
   // announce the same bonus independently (§5.2).
   std::array<std::array<bool, 2>, kNumBonuses> bonus_announced_;
