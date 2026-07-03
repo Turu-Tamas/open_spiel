@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <array>
 #include <memory>
-#include <numeric>
 #include <string>
 #include <utility>
 #include <vector>
@@ -11,6 +10,7 @@
 #include "open_spiel/abseil-cpp/absl/strings/str_cat.h"
 #include "open_spiel/abseil-cpp/absl/strings/str_join.h"
 #include "open_spiel/game_parameters.h"
+#include "open_spiel/games/hungarian_tarokk/scoring.h"
 #include "open_spiel/spiel.h"
 #include "open_spiel/spiel_globals.h"
 #include "open_spiel/spiel_utils.h"
@@ -261,6 +261,7 @@ void HungarianTarokkState::ResolveTrick() {
   Player winner = (trick_leader_ + best_index) % kNumPlayers;
   for (Card c : trick_cards_) collected_points_[winner] += CardPoints(c);
   completed_tricks_.push_back(trick_cards_);
+  trick_winners_.push_back(winner);
   trick_cards_.clear();
   ++tricks_played_;
   if (tricks_played_ == kNumTricks) {
@@ -278,18 +279,109 @@ void HungarianTarokkState::StartPlaying() {
   current_player_ = 0;
 }
 
+DealScore HungarianTarokkState::BuildDealScore() const {
+  const auto side_of = [&](Player p) {
+    return (p == declarer_ || p == partner_) ? Side::kDeclarers
+                                             : Side::kDefenders;
+  };
+
+  // Reconstruct, for every played card, which trick it fell in, who played it,
+  // and which side captured it. The forehand (P0) leads the first trick; each
+  // trick's winner leads the next.
+  std::array<Side, kNumCards> captor;
+  std::array<Player, kNumCards> player_of;
+  std::array<int, kNumCards> trick_of;
+  int declarer_trick_points = 0;
+  int declarer_tricks = 0;
+  Player leader = 0;
+  for (size_t t = 0; t < completed_tricks_.size(); ++t) {
+    const std::vector<Card>& tc = completed_tricks_[t];
+    const Player winner = trick_winners_[t];
+    const Side ws = side_of(winner);
+    int points = 0;
+    for (int i = 0; i < kNumPlayers; ++i) {
+      const Card c = tc[i];
+      captor[c.index] = ws;
+      player_of[c.index] = (leader + i) % kNumPlayers;
+      trick_of[c.index] = t;
+      points += CardPoints(c);
+    }
+    if (ws == Side::kDeclarers) {
+      declarer_trick_points += points;
+      ++declarer_tricks;
+    }
+    leader = winner;
+  }
+
+  DealScore d;
+  d.declarer = declarer_;
+  d.partner = partner_;
+  d.base_value = BidGameValue(winning_bid_);
+  d.declarer_tricks = declarer_tricks;
+
+  // §7.1: the declarer's side adds only its own skart; the other three players'
+  // discards all count for the opponents.
+  int declarer_discard_points = 0;
+  for (Card c : discarded_[declarer_]) declarer_discard_points += CardPoints(c);
+  d.declarer_card_points = declarer_trick_points + declarer_discard_points;
+
+  // Trull (all three honours) and four kings, by capturing side.
+  for (Side s : {Side::kDeclarers, Side::kDefenders}) {
+    const int i = static_cast<int>(s);
+    d.trull_made[i] = captor[kCardSkiz.index] == s &&
+                      captor[kCardXXI.index] == s &&
+                      captor[kCardPagat.index] == s;
+    d.four_kings_made[i] = captor[MakeKing(kHearts).index] == s &&
+                           captor[MakeKing(kDiamonds).index] == s &&
+                           captor[MakeKing(kClubs).index] == s &&
+                           captor[MakeKing(kSpades).index] == s;
+  }
+
+  // Pagátultimó: the pagát's side, and whether it won or lost the last trick.
+  const Player pagat_player = player_of[kCardPagat.index];
+  d.pagat_side = side_of(pagat_player);
+  if (trick_of[kCardPagat.index] == kNumTricks - 1) {
+    d.pagat_last_trick =
+        (trick_winners_[kNumTricks - 1] == pagat_player) ? 1 : -1;
+  } else {
+    d.pagat_last_trick = 0;
+  }
+
+  // XXI-catch: the Skíz took the opponents' XXI in the same trick (§5.2 -- not a
+  // catch when the two fall together from partners).
+  const Player xxi_player = player_of[kCardXXI.index];
+  const Player skiz_player = player_of[kCardSkiz.index];
+  if (trick_of[kCardXXI.index] == trick_of[kCardSkiz.index] &&
+      side_of(xxi_player) != side_of(skiz_player)) {
+    d.xxi_caught = true;
+    d.xxi_catcher_side = side_of(skiz_player);
+  }
+
+  // Announcements: per-(bonus, side) announcement and kontra level, the game
+  // kontra, and each player's tarokk-count declaration.
+  for (int b = 0; b < kNumBonuses; ++b) {
+    const Bonus bonus = static_cast<Bonus>(b);
+    for (Side s : {Side::kDeclarers, Side::kDefenders}) {
+      const int i = static_cast<int>(s);
+      d.announced[b][i] = announcements_.BonusAnnounced(bonus, s);
+      d.bonus_kontra[b][i] = announcements_.BonusKontraLevel(bonus, s);
+    }
+  }
+  d.game_kontra = announcements_.GameKontraLevel();
+  for (Player p = 0; p < kNumPlayers; ++p) {
+    d.declared_tarokks[p] = announcements_.DeclaredTarokks(p);
+  }
+  return d;
+}
+
 std::vector<double> HungarianTarokkState::Returns() const {
-  if (phase_ != Phase::kFinished) {
+  // Zero returns until a deal is actually scored: while play is unfinished, or
+  // for a passed-out / annulled hand that never reached the play (no score).
+  if (phase_ != Phase::kFinished || tricks_played_ != kNumTricks) {
     return std::vector<double>(kNumPlayers, 0.0);
   }
-  int total =
-      std::accumulate(collected_points_.begin(), collected_points_.end(), 0);
-  double mean = static_cast<double>(total) / kNumPlayers;
-  std::vector<double> returns(kNumPlayers);
-  for (int p = 0; p < kNumPlayers; ++p) {
-    returns[p] = static_cast<double>(collected_points_[p]) - mean;
-  }
-  return returns;
+  const std::array<double, kNumPlayers> scores = ScoreDeal(BuildDealScore());
+  return std::vector<double>(scores.begin(), scores.end());
 }
 
 std::string HungarianTarokkState::PublicLogString() const {

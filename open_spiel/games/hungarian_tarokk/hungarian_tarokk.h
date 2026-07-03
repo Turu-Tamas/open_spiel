@@ -10,6 +10,7 @@
 #include "open_spiel/games/hungarian_tarokk/announcements.h"
 #include "open_spiel/games/hungarian_tarokk/bidding.h"
 #include "open_spiel/games/hungarian_tarokk/cards.h"
+#include "open_spiel/games/hungarian_tarokk/scoring.h"
 #include "open_spiel/games/hungarian_tarokk/talon.h"
 #include "open_spiel/spiel.h"
 
@@ -79,6 +80,9 @@ class HungarianTarokkState : public State {
   std::vector<Action> LegalPlayActions() const;
   void ResolveTrick();
   void StartPlaying();
+  // Gathers the completed deal's trick-play and announcement facts for scoring
+  // (§7). Valid only once all nine tricks are played.
+  DealScore BuildDealScore() const;
   std::string PublicLogString() const;
   // The hands / skart / talon currently live inside talon_exchange_ during the
   // exchange and in the parent's own members otherwise; these resolve to the
@@ -106,6 +110,7 @@ class HungarianTarokkState : public State {
   Player trick_leader_ = 0;
   std::vector<Card> trick_cards_;  // current (partial) trick
   std::vector<std::vector<Card>> completed_tricks_;
+  std::vector<Player> trick_winners_;  // winner of each completed trick
   int tricks_played_ = 0;
 };
 
@@ -118,8 +123,8 @@ class HungarianTarokkGame : public Game {
   }
   int MaxChanceOutcomes() const override { return kNumCards; }
   int NumPlayers() const override { return kNumPlayers; }
-  double MinUtility() const override { return -kTotalCardPoints; }
-  double MaxUtility() const override { return kTotalCardPoints; }
+  double MinUtility() const override { return -kMaxDealScore; }
+  double MaxUtility() const override { return kMaxDealScore; }
   absl::optional<double> UtilitySum() const override { return 0.0; }
   int MaxGameLength() const override {
     // Bidding + annulment (<= one per player) + the six discards + the round of

@@ -12,9 +12,6 @@
 #include "open_spiel/games/hungarian_tarokk/talon.h"
 #include "open_spiel/spiel.h"
 
-// Simplification for now (to be refined later, see rules.md): announced bonuses
-// and tarokk declarations do not yet affect scoring.
-
 namespace open_spiel {
 namespace hungarian_tarokk {
 
@@ -131,6 +128,14 @@ class AnnouncementState {
   // office" (hivatalból kontra, §4.3); kInvalidPlayer if no discarded tarokk
   // was called. This kontra is automatic, not a player action.
   Player HivatalbolKontraPlayer() const { return hivatalbol_kontra_player_; }
+
+  bool BonusAnnounced(Bonus b, Side s) const {
+    return bonus_announced_[static_cast<int>(b)][static_cast<int>(s)];
+  }
+  int BonusKontraLevel(Bonus b, Side s) const {
+    return kontra_level_[KontraItemForBonus(b, s)];
+  }
+  int GameKontraLevel() const { return kontra_level_[kGameKontraItem]; }
 
   std::string ToString() const;  // public log (does not reveal the partner)
 

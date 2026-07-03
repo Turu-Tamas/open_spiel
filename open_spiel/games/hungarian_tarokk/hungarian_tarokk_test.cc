@@ -905,6 +905,226 @@ void TrullPromiseTest() {
   }
 }
 
+// Sets a (bonus, side) announcement (and optional kontra level) on a DealScore.
+void Ann(DealScore* d, Bonus b, Side s, int kontra = 0) {
+  d->announced[static_cast<int>(b)][static_cast<int>(s)] = true;
+  d->bonus_kontra[static_cast<int>(b)][static_cast<int>(s)] = kontra;
+}
+
+// Deal scoring (§7): the base-game multiplier table, the flat bonuses, and the
+// settlement form.
+void ScoringTest() {
+  // ---- Base game / double / volát multiplier table (§7.2). ----
+  // A partnered plain-three deal (base value 1); the declarer's return equals
+  // the per-opponent value V. Each row is scored across the six point/trick
+  // brackets of the table: no trick, <=23, 24-47, 48-70, >=71, all tricks.
+  const int pts[6] = {0, 10, 40, 60, 80, 94};
+  const int trk[6] = {0, 1, 3, 5, 7, 9};
+  auto check_row = [&](const DealScore& config, const std::array<int, 6>& want) {
+    for (int i = 0; i < 6; ++i) {
+      DealScore d = config;
+      d.declarer = 0;
+      d.partner = 1;
+      d.base_value = 1;
+      d.declarer_card_points = pts[i];
+      d.declarer_tricks = trk[i];
+      SPIEL_CHECK_EQ(ScoreDeal(d)[0], static_cast<double>(want[i]));
+    }
+  };
+
+  { DealScore c; check_row(c, {-3, -2, -1, 1, 2, 3}); }  // Nothing
+  {
+    DealScore c;
+    Ann(&c, Bonus::kDoubleGame, Side::kDeclarers);
+    check_row(c, {-7, -6, -5, -4, 4, 7});  // Declarer announces double game
+  }
+  {
+    DealScore c;
+    Ann(&c, Bonus::kVolat, Side::kDeclarers);
+    check_row(c, {-9, -8, -7, -6, -6, 6});  // Declarer announces volát
+  }
+  {
+    DealScore c;
+    Ann(&c, Bonus::kDoubleGame, Side::kDeclarers);
+    Ann(&c, Bonus::kVolat, Side::kDeclarers);
+    check_row(c, {-13, -12, -11, -10, -2, 10});  // Double game + volát
+  }
+  {
+    DealScore c;
+    c.game_kontra = 1;
+    check_row(c, {-5, -4, -2, 2, 4, 5});  // Kontra the game
+  }
+  {
+    DealScore c;
+    c.game_kontra = 1;
+    Ann(&c, Bonus::kDoubleGame, Side::kDefenders);
+    check_row(c, {-9, -6, 2, 6, 8, 9});  // Kontra game; opp. announce double
+  }
+  {
+    DealScore c;
+    Ann(&c, Bonus::kDoubleGame, Side::kDeclarers, /*kontra=*/1);
+    check_row(c, {-11, -10, -9, -8, 8, 11});  // Double; opp. kontra the double
+  }
+  {
+    DealScore c;
+    Ann(&c, Bonus::kDoubleGame, Side::kDeclarers, /*kontra=*/1);
+    c.game_kontra = 1;
+    check_row(c, {-13, -12, -10, -6, 10, 13});  // Double; opp. kontra double+game
+  }
+
+  // A helper for flat-bonus deltas: a partnered plain three the declarer wins
+  // 48-70 (V = +1) unless tweaked, returning the declarer's V.
+  auto won_game = []() {
+    DealScore d;
+    d.declarer = 0;
+    d.partner = 1;
+    d.base_value = 1;
+    d.declarer_card_points = 60;
+    d.declarer_tricks = 5;
+    return d;
+  };
+  SPIEL_CHECK_EQ(ScoreDeal(won_game())[0], 1.0);
+
+  // ---- Silent lost pagátultimó (§5.2): charged even with no announcement. ----
+  {
+    DealScore d = won_game();  // base V = +1
+    d.pagat_side = Side::kDeclarers;
+    d.pagat_last_trick = -1;  // the declarers' pagát reached the last trick, lost
+    SPIEL_CHECK_EQ(ScoreDeal(d)[0], 1.0 - 5.0);  // -5 to the declarers
+  }
+  {
+    DealScore d = won_game();
+    d.pagat_side = Side::kDefenders;
+    d.pagat_last_trick = -1;  // a defender's silent ultimó fails -> +5 to declarers
+    SPIEL_CHECK_EQ(ScoreDeal(d)[0], 1.0 + 5.0);
+  }
+  {
+    DealScore d = won_game();
+    d.pagat_side = Side::kDeclarers;
+    d.pagat_last_trick = 1;  // silent ultimó made -> +5
+    SPIEL_CHECK_EQ(ScoreDeal(d)[0], 1.0 + 5.0);
+  }
+  {
+    DealScore d = won_game();
+    d.pagat_side = Side::kDeclarers;
+    d.pagat_last_trick = 0;  // pagát never reached the last trick -> nothing
+    SPIEL_CHECK_EQ(ScoreDeal(d)[0], 1.0);
+  }
+  {  // Announced pagátultimó pays +/-10 (here failed).
+    DealScore d = won_game();
+    Ann(&d, Bonus::kPagatUlti, Side::kDeclarers);
+    d.pagat_side = Side::kDeclarers;
+    d.pagat_last_trick = -1;
+    SPIEL_CHECK_EQ(ScoreDeal(d)[0], 1.0 - 10.0);
+  }
+
+  // ---- Volát suppresses silent trull / four kings, but the game and double are
+  //      subsumed into the volát value; announced trull/four kings still score. --
+  {
+    // The classic "give up one trick" (§5.2): 8 tricks and >=71 -> silent double
+    // (+2) + silent trull (+1) + silent four kings (+1) = +4.
+    DealScore d = won_game();
+    d.declarer_card_points = 80;
+    d.declarer_tricks = 8;
+    d.trull_made[static_cast<int>(Side::kDeclarers)] = true;
+    d.four_kings_made[static_cast<int>(Side::kDeclarers)] = true;
+    SPIEL_CHECK_EQ(ScoreDeal(d)[0], 4.0);
+  }
+  {
+    // Volát: only the volát (+3) scores -- the silent trull and four kings the
+    // volát necessarily also made are NOT added (and no separate game/double).
+    DealScore d = won_game();
+    d.declarer_card_points = 94;
+    d.declarer_tricks = 9;
+    d.trull_made[static_cast<int>(Side::kDeclarers)] = true;
+    d.four_kings_made[static_cast<int>(Side::kDeclarers)] = true;
+    SPIEL_CHECK_EQ(ScoreDeal(d)[0], 3.0);
+  }
+  {
+    // Under a volát an ANNOUNCED four kings still scores (+2 on top of +3).
+    DealScore d = won_game();
+    d.declarer_card_points = 94;
+    d.declarer_tricks = 9;
+    d.four_kings_made[static_cast<int>(Side::kDeclarers)] = true;
+    Ann(&d, Bonus::kFourKings, Side::kDeclarers);
+    SPIEL_CHECK_EQ(ScoreDeal(d)[0], 3.0 + 2.0);
+  }
+  {
+    // Pagátultimó is NOT suppressed by volát: volát (+3) + silent ultimó (+5).
+    DealScore d = won_game();
+    d.declarer_card_points = 94;
+    d.declarer_tricks = 9;
+    d.trull_made[static_cast<int>(Side::kDeclarers)] = true;
+    d.four_kings_made[static_cast<int>(Side::kDeclarers)] = true;
+    d.pagat_side = Side::kDeclarers;
+    d.pagat_last_trick = 1;
+    SPIEL_CHECK_EQ(ScoreDeal(d)[0], 3.0 + 5.0);
+  }
+
+  // ---- Other flat bonuses (§7.3). ----
+  {  // Silent trull (+1) without a volát.
+    DealScore d = won_game();
+    d.trull_made[static_cast<int>(Side::kDeclarers)] = true;
+    SPIEL_CHECK_EQ(ScoreDeal(d)[0], 1.0 + 1.0);
+  }
+  {  // Announced trull kontra'd (rekontra) and made: 2 * 2^1 = +4.
+    DealScore d = won_game();
+    d.trull_made[static_cast<int>(Side::kDeclarers)] = true;
+    Ann(&d, Bonus::kTrull, Side::kDeclarers, /*kontra=*/1);
+    SPIEL_CHECK_EQ(ScoreDeal(d)[0], 1.0 + 4.0);
+  }
+  {  // XXI-catch by the declarers: silent +21.
+    DealScore d = won_game();
+    d.xxi_caught = true;
+    d.xxi_catcher_side = Side::kDeclarers;
+    SPIEL_CHECK_EQ(ScoreDeal(d)[0], 1.0 + 21.0);
+  }
+  {  // XXI-catch announced by the declarers but not achieved: -42.
+    DealScore d = won_game();
+    d.xxi_caught = false;
+    Ann(&d, Bonus::kXxiCatch, Side::kDeclarers);
+    SPIEL_CHECK_EQ(ScoreDeal(d)[0], 1.0 - 42.0);
+  }
+  {  // Tarokk declarations: a declarer-side 9 (+2) and a defender 8 (-1).
+    DealScore d = won_game();
+    d.declared_tarokks[1] = 9;  // the partner
+    d.declared_tarokks[2] = 8;  // a defender
+    SPIEL_CHECK_EQ(ScoreDeal(d)[0], 1.0 + 2.0 - 1.0);
+  }
+
+  // ---- Settlement form (§7.4). ----
+  {  // Partnered: the two sides get equal and opposite amounts, summing to zero.
+    DealScore d = won_game();
+    std::array<double, kNumPlayers> r = ScoreDeal(d);
+    SPIEL_CHECK_EQ(r[0], 1.0);   // declarer
+    SPIEL_CHECK_EQ(r[1], 1.0);   // partner
+    SPIEL_CHECK_EQ(r[2], -1.0);  // defenders
+    SPIEL_CHECK_EQ(r[3], -1.0);
+    SPIEL_CHECK_EQ(r[0] + r[1] + r[2] + r[3], 0.0);
+  }
+  {  // Lone declarer: settles with each opponent, so scores 3x the -V each pays.
+    DealScore d = won_game();
+    d.partner = kInvalidPlayer;
+    std::array<double, kNumPlayers> r = ScoreDeal(d);
+    SPIEL_CHECK_EQ(r[0], 3.0);
+    SPIEL_CHECK_EQ(r[1], -1.0);
+    SPIEL_CHECK_EQ(r[2], -1.0);
+    SPIEL_CHECK_EQ(r[3], -1.0);
+    SPIEL_CHECK_EQ(r[0] + r[1] + r[2] + r[3], 0.0);
+  }
+
+  // A solo (base value 4) scales the base game but not the flat bonuses.
+  {
+    DealScore d = won_game();
+    d.base_value = 4;                      // solo
+    d.declarer_card_points = 94;           // volát
+    d.declarer_tricks = 9;
+    d.pagat_side = Side::kDeclarers;
+    d.pagat_last_trick = 1;                // silent ultimó
+    SPIEL_CHECK_EQ(ScoreDeal(d)[0], 3.0 * 4 + 5.0);  // volát 3*G plus flat +5
+  }
+}
+
 }  // namespace
 }  // namespace hungarian_tarokk
 }  // namespace open_spiel
@@ -918,5 +1138,6 @@ int main(int argc, char** argv) {
   open_spiel::hungarian_tarokk::PublicSideDeductionTest();
   open_spiel::hungarian_tarokk::DiscardedTarokkCallTest();
   open_spiel::hungarian_tarokk::TrullPromiseTest();
+  open_spiel::hungarian_tarokk::ScoringTest();
   open_spiel::hungarian_tarokk::BasicHungarianTarokkTests();
 }
