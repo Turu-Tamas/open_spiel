@@ -216,9 +216,10 @@ void HungarianTarokkState::DoApplyAction(Action action_id) {
         const Player ulti_player = bidding_.PagatUltiObligation()
                                        ? bidding_.CueBidder()
                                        : kInvalidPlayer;
-        announcements_ = AnnouncementState(
-            players_cards_, declarer_, winning_bid_,
-            bidding_.ObligatoryCalledCard(), ulti_player, discarded_);
+        announcements_ =
+            AnnouncementState(players_cards_, declarer_, winning_bid_,
+                              bidding_.ObligatoryCalledCard(), ulti_player,
+                              bidding_.NumBidders(), discarded_);
         phase_ = Phase::kAnnouncements;
       }
     }

@@ -12,11 +12,8 @@
 #include "open_spiel/games/hungarian_tarokk/talon.h"
 #include "open_spiel/spiel.h"
 
-// Simplifications for now (to be refined later, see rules.md):
-//   * the tulétroá honour promises (§5.7) are not modelled, and announced
-//     bonuses / tarokk declarations do not yet affect scoring;
-//   * calling a discarded tarokk (§4.3) is not handled, so the holder of a
-//     called card is always one of the current hands.
+// Simplification for now (to be refined later, see rules.md): announced bonuses
+// and tarokk declarations do not yet affect scoring.
 
 namespace open_spiel {
 namespace hungarian_tarokk {
@@ -107,10 +104,13 @@ class AnnouncementState {
   // skart (used to call a discarded tarokk, §4.3); `obligatory` is the card the
   // auction forces the declarer to call (kNone = free choice).
   // `pagat_ulti_player` (kInvalidPlayer if none) is the cue-bidder who must
-  // announce pagátultimó (C §5.2.2), decided during the auction.
+  // announce pagátultimó (C §5.2.2), decided during the auction. `num_bidders`
+  // is how many players made a positive bid in the auction, used by the §5.7
+  // trull announcement promises.
   AnnouncementState(std::vector<std::vector<Card>> hands, Player declarer,
                     Bid bid, CalledCard obligatory,
                     Player pagat_ulti_player = kInvalidPlayer,
+                    int num_bidders = 0,
                     std::vector<std::vector<Card>> discards = {});
 
   Player CurrentPlayer() const { return current_player_; }
@@ -124,12 +124,12 @@ class AnnouncementState {
   Player Partner() const { return partner_; }
   // The tarokk count (0, 8 or 9) a player declared (tarokkszám, §5.4).
   int DeclaredTarokks(Player p) const { return declared_tarokks_[p]; }
-  // The side a player is publicly known to be on, or nullopt if it cannot yet be
-  // deduced from the call and the announcements so far (§5.5).
+  // The side a player is publicly known to be on, or nullopt if it cannot yet
+  // be deduced from the call and the announcements so far (§5.5).
   absl::optional<Side> PublicSide(Player p) const { return public_side_[p]; }
   // The player who, having discarded the called tarokk, kontra'd the game "by
-  // office" (hivatalból kontra, §4.3); kInvalidPlayer if no discarded tarokk was
-  // called. This kontra is automatic, not a player action.
+  // office" (hivatalból kontra, §4.3); kInvalidPlayer if no discarded tarokk
+  // was called. This kontra is automatic, not a player action.
   Player HivatalbolKontraPlayer() const { return hivatalbol_kontra_player_; }
 
   std::string ToString() const;  // public log (does not reveal the partner)
@@ -143,6 +143,8 @@ class AnnouncementState {
   // call (declarer holding the XX may then call almost any tarokk).
   bool NonDeclarerDiscardedTarokk() const;
   bool BonusAnnounceable(int bonus, Player p) const;
+  // Whether p's hand satisfies the honour promise that announcing trull carries
+  bool TrullPromiseMet(Player p) const;
   // The side allowed to raise item `i`'s kontra next, or nullopt if none.
   absl::optional<Side> KontraRaiserSide(int item) const;
   // Whether player p still owes a mandatory declaration this turn (the obliged
@@ -156,8 +158,8 @@ class AnnouncementState {
     return last_speaker_side_.value_or(Side::kDeclarers);
   }
   // Whether p may make a side-carrying announcement (a bonus or a tarokk count)
-  // that is correctly attributed to its own side without first revealing it: its
-  // side is already public, or the convention default already matches it.
+  // that is correctly attributed to its own side without first revealing it:
+  // its side is already public, or the convention default already matches it.
   bool CanAnnounceForOwnSide(Player p) const;
   // Record that p revealed its side by speaking, then re-run the deduction.
   void RevealSide(Player p);
@@ -173,6 +175,7 @@ class AnnouncementState {
   CalledCard obligatory_;
   // The cue-bidder obliged to announce pagátultimó (kInvalidPlayer if none).
   Player pagat_ulti_player_ = kInvalidPlayer;
+  int num_bidders_ = 0;  // players who made a positive bid (for §5.7)
 
   Player current_player_ = kInvalidPlayer;
   Card called_card_ = kInvalidCard;
@@ -188,10 +191,13 @@ class AnnouncementState {
   // tarokk count if they hold 8/9 (C §4.1.3).
   std::array<bool, kNumPlayers> pagat_ulti_committed_;
   std::array<int, kNumPlayers> declared_tarokks_;  // 0, 8 or 9 (tarokkszám)
-  // §5.5 public side-deduction: each player's publicly-known side (nullopt = not
-  // yet deducible), whether a partner is publicly known to exist at all (false
-  // after a bare XX call, which may be a lone declarer), and the side of the most
-  // recent speaker (the convention base).
+  // How many turns each player has already completed in the announcement phase;
+  // 0 means the player is in its first round (relevant to the §5.7 promises).
+  std::array<int, kNumPlayers> turns_taken_;
+  // §5.5 public side-deduction: each player's publicly-known side (nullopt =
+  // not yet deducible), whether a partner is publicly known to exist at all
+  // (false after a bare XX call, which may be a lone declarer), and the side of
+  // the most recent speaker (the convention base).
   std::array<absl::optional<Side>, kNumPlayers> public_side_;
   bool partner_known_to_exist_ = false;
   absl::optional<Side> last_speaker_side_;

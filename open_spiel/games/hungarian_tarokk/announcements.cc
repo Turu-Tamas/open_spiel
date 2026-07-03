@@ -60,7 +60,7 @@ std::string AnnouncementActionToString(Action action) {
 AnnouncementState::AnnouncementState(std::vector<std::vector<Card>> hands,
                                      Player declarer, Bid bid,
                                      CalledCard obligatory,
-                                     Player pagat_ulti_player,
+                                     Player pagat_ulti_player, int num_bidders,
                                      std::vector<std::vector<Card>> discards)
     : hands_(std::move(hands)),
       discards_(std::move(discards)),
@@ -68,12 +68,14 @@ AnnouncementState::AnnouncementState(std::vector<std::vector<Card>> hands,
       bid_(bid),
       obligatory_(obligatory),
       pagat_ulti_player_(pagat_ulti_player),
+      num_bidders_(num_bidders),
       current_player_(declarer) {
   if (discards_.empty()) discards_.resize(kNumPlayers);  // no skart given
   for (std::array<bool, 2>& sides : bonus_announced_) sides.fill(false);
   kontra_level_.fill(0);
   pagat_ulti_committed_.fill(false);
   declared_tarokks_.fill(0);
+  turns_taken_.fill(0);
   public_side_.fill(absl::nullopt);
   public_side_[declarer_] = Side::kDeclarers;  // the declarer's side is public
 }
@@ -103,17 +105,17 @@ std::vector<Action> AnnouncementState::LegalCalls() const {
 
   const std::vector<Card>& dh = hands_[declarer_];
   if (!HandHasCard(dh, kCardXX)) {
-    // The declarer lacks the XX, so calls it. (The XX may never be discarded, so
-    // its holder is always a current hand -- a real partner.)
+    // The declarer lacks the XX, so calls it. (The XX may never be discarded,
+    // so its holder is always a current hand -- a real partner.)
     return {CallActionForTarokk(kCardXX)};
   }
 
   // The declarer holds the XX.
   if (NonDeclarerDiscardedTarokk()) {
-    // §6.5: with a tarokk in the skart the declarer may call any tarokk except an
-    // honour, one it holds itself (you call yourself only with the XX), or one it
-    // discarded -- so it may call a tarokk a defender laid away (§4.3). It may
-    // still call its own XX to play alone.
+    // §6.5: with a tarokk in the skart the declarer may call any tarokk except
+    // an honour, one it holds itself (you call yourself only with the XX), or
+    // one it discarded -- so it may call a tarokk a defender laid away (§4.3).
+    // It may still call its own XX to play alone.
     std::vector<Action> calls;
     for (int t = 0; t < kNumTarokks; ++t) {
       const Card c{t};
@@ -127,8 +129,8 @@ std::vector<Action> AnnouncementState::LegalCalls() const {
     return calls;
   }
 
-  // Otherwise: call the highest tarokk below the XX it does not hold, or its own
-  // XX to play alone.
+  // Otherwise: call the highest tarokk below the XX it does not hold, or its
+  // own XX to play alone.
   Card highest_below = kInvalidCard;
   for (int t = kCardXX.index - 1; t >= 0; --t) {
     if (!HandHasCard(dh, Card{t})) {
@@ -153,6 +155,42 @@ bool AnnouncementState::BonusAnnounceable(int bonus, Player p) const {
     return false;
   }
   return true;
+}
+
+bool AnnouncementState::TrullPromiseMet(Player p) const {
+  // §5.7: announcing trull promises specific honour holdings in the announcer's
+  // hand, varying with role, auction context, and round. (Honours = pagát, XXI,
+  // Skíz; high honours = XXI, Skíz -- rules.md §2.)
+  const bool has_skiz = HandHasCard(hands_[p], kCardSkiz);
+  const bool has_xxi = HandHasCard(hands_[p], kCardXXI);
+  const int high = (has_skiz ? 1 : 0) + (has_xxi ? 1 : 0);
+  const int honours = high + (HandHasCard(hands_[p], kCardPagat) ? 1 : 0);
+
+  // A defender's trull always follows the second-round rule: >= 1 high honour
+  // (C §4.2.4).
+  if (SideOf(p) == Side::kDefenders) return high >= 1;
+
+  // Declarer's side. From the second round on, anyone needs >= 1 high honour
+  // (C §4.2.4); the stricter promises below apply only in the first round.
+  if (turns_taken_[p] > 0) return high >= 1;
+
+  const bool invited_or_yielded = obligatory_ != CalledCard::kNone;
+  if (p == declarer_) {
+    if (invited_or_yielded) return high >= 1;
+    // Simple game (C §4.2.1): with three bidders the honours are split one per
+    // bidder so the declarer promises only the Skíz; otherwise both high
+    // honours.
+    if (num_bidders_ >= 3) return has_skiz;
+    return high == 2;
+  }
+  // The partner (holder of the called card). In an invited/yielded game the
+  // partner is the inviter/yielder; picking up a trull the declarer declined
+  // promises two of the three honours (C §4.2.2, Megjegyzés). (The declarer not
+  // having announced trull is implied -- otherwise the partner's same-side
+  // trull is already blocked by BonusAnnounceable.) A simple game's called
+  // partner just promises >= 1 high honour (C §4.2.3).
+  if (invited_or_yielded) return honours >= 2;
+  return high >= 1;
 }
 
 absl::optional<Side> AnnouncementState::KontraRaiserSide(int item) const {
@@ -191,9 +229,10 @@ bool AnnouncementState::HasPendingObligation(Player p) const {
 }
 
 bool AnnouncementState::CanAnnounceForOwnSide(Player p) const {
-  // If p's side is already public it may announce for it directly; otherwise the
-  // §5.5 convention attributes the announcement to the last speaker's side (the
-  // declarer's if none), so it only lands on p's own side when the two match.
+  // If p's side is already public it may announce for it directly; otherwise
+  // the §5.5 convention attributes the announcement to the last speaker's side
+  // (the declarer's if none), so it only lands on p's own side when the two
+  // match.
   if (public_side_[p].has_value()) return true;
   return ConventionDefaultSide() == SideOf(p);
 }
@@ -252,8 +291,11 @@ std::vector<Action> AnnouncementState::LegalActions() const {
   // its own side (otherwise it must first reveal itself with a kontra).
   const bool can_announce = CanAnnounceForOwnSide(p);
   for (int b = 0; b < kNumBonuses; ++b) {
-    if (can_announce && BonusAnnounceable(b, p))
-      legal.push_back(AnnounceBonusAction(static_cast<Bonus>(b)));
+    if (!can_announce || !BonusAnnounceable(b, p)) continue;
+    // Trull additionally requires the announcer's hand to back its §5.7
+    // promise.
+    if (b == static_cast<int>(Bonus::kTrull) && !TrullPromiseMet(p)) continue;
+    legal.push_back(AnnounceBonusAction(static_cast<Bonus>(b)));
   }
   for (int i = 0; i < kNumKontraItems; ++i) {
     // No side-deduction requirements for kontras, because you have
@@ -267,8 +309,10 @@ std::vector<Action> AnnouncementState::LegalActions() const {
   // carrying, so subject to the same reveal rule).
   if (can_announce && declared_tarokks_[p] == 0) {
     const int n = CountTarokks(hands_[p]);
-    if (n == 9) legal.push_back(kActionDeclareNine);
-    else if (n == 8) legal.push_back(kActionDeclareEight);
+    if (n == 9)
+      legal.push_back(kActionDeclareNine);
+    else if (n == 8)
+      legal.push_back(kActionDeclareEight);
   }
   std::sort(legal.begin(), legal.end());
   return legal;
@@ -297,7 +341,8 @@ void AnnouncementState::ApplyAction(Action action) {
       for (Player q = 0; q < kNumPlayers; ++q) {
         if (q != declarer_ && HandHasCard(discards_[q], called_card_)) {
           hivatalbol_kontra_player_ = q;
-          kontra_level_[kGameKontraItem] += 1;  // the automatic by-office kontra
+          kontra_level_[kGameKontraItem] +=
+              1;  // the automatic by-office kontra
           break;
         }
       }
@@ -313,13 +358,14 @@ void AnnouncementState::ApplyAction(Action action) {
       }
       last_speaker_side_ = Side::kDefenders;
     } else if (obligatory_ != CalledCard::kNone) {
-      // A forced call (an accepted cue bid, or a yield) names the publicly-known
-      // inviter as the partner, so the whole table's sides become public.
+      // A forced call (an accepted cue bid, or a yield) names the
+      // publicly-known inviter as the partner, so the whole table's sides
+      // become public.
       partner_known_to_exist_ = true;
       if (partner_ != kInvalidPlayer) public_side_[partner_] = Side::kDeclarers;
     } else if (called_card_ == kCardXX) {
-      // A bare XX call may instead be the declarer calling itself to play alone,
-      // so the public does not yet know a partner exists.
+      // A bare XX call may instead be the declarer calling itself to play
+      // alone, so the public does not yet know a partner exists.
       partner_known_to_exist_ = false;
     } else {
       // Calling any other tarokk requires a partner (you may call yourself only
@@ -366,6 +412,7 @@ void AnnouncementState::ApplyAction(Action action) {
 }
 
 void AnnouncementState::EndTurn() {
+  ++turns_taken_[current_player_];  // this turn is now complete (§5.7 rounds)
   if (spoke_this_turn_) {
     consecutive_passes_ = 0;
   } else {
@@ -387,8 +434,8 @@ std::string AnnouncementState::ToString() const {
                                  AnnouncementActionToString(call.second)));
   }
   std::string str = absl::StrJoin(parts, " ");
-  // The hivatalból kontra is automatic (not a logged action); surface it here so
-  // it shows up in observations (§4.3).
+  // The hivatalból kontra is automatic (not a logged action); surface it here
+  // so it shows up in observations (§4.3).
   if (hivatalbol_kontra_player_ != kInvalidPlayer) {
     absl::StrAppend(&str, str.empty() ? "" : " ", "[hivatalbol kontra by P",
                     hivatalbol_kontra_player_, "]");

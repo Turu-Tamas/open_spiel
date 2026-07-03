@@ -70,6 +70,15 @@ class BiddingState {
   bool PassedOut() const { return finished_ && declarer_ == kInvalidPlayer; }
   Player Declarer() const { return declarer_; }
   Bid WinningBid() const { return winning_bid_; }
+  // How many players made a positive bid (bid or held) during the auction; used
+  // by the §5.7 trull announcement promises.
+  int NumBidders() const {
+    int n = 0;
+    for (const absl::optional<Bid>& b : player_bid_) {
+      if (b.has_value()) ++n;
+    }
+    return n;
+  }
 
   // Conventional outcomes (see file comment). CueBidder() is kInvalidPlayer if
   // no cue bid was made; Yielded() is true for a yielded game;
@@ -78,12 +87,12 @@ class BiddingState {
   CalledCard CuedCard() const { return cued_card_; }
   bool Yielded() const { return yielded_; }
   CalledCard ObligatoryCalledCard() const { return obligatory_called_card_; }
-  // True (once finished) if an *accepted* invite obliges pagátultimó (C §5.2.2):
-  // a cue bid by a player whose only honour is the pagát, where the cue-bidder
-  // did not win the auction (so the winner is forced to call them in). If the
-  // cue-bidder wins outright the invite is not accepted and there is no
-  // obligation. Decided from the bidding-time hand, so a high honour later drawn
-  // from the talon does not lift it.
+  // True (once finished) if an *accepted* invite obliges pagátultimó (C
+  // §5.2.2): a cue bid by a player whose only honour is the pagát, where the
+  // cue-bidder did not win the auction (so the winner is forced to call them
+  // in). If the cue-bidder wins outright the invite is not accepted and there
+  // is no obligation. Decided from the bidding-time hand, so a high honour
+  // later drawn from the talon does not lift it.
   bool PagatUltiObligation() const { return pagat_ulti_obligation_; }
 
   std::string ToString() const;

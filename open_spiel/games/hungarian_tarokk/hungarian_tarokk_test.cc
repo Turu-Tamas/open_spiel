@@ -510,44 +510,46 @@ void AnnouncementLogicTest() {
   }
 
   // Both sides may announce the same bonus, each with its own kontra chain
-  // (§5.2, §5.3). The declarer (side 0) announces trull; a defender (side 1)
-  // must first reveal its side with a kontra before it may announce its own
-  // trull (§5.5); the partner (side 0) may then rekontra its own and kontra the
-  // defenders'.
+  // (§5.2, §5.3). The declarer (side 0) announces four kings; a defender
+  // (side 1) must first reveal its side with a kontra before it may announce
+  // its own four kings (§5.5); the partner (side 0) may then rekontra its own
+  // and kontra the defenders'.
   {
     AnnouncementState a(hands(2), 0, Bid::kThree, CalledCard::kNone);
     a.ApplyAction(CallActionForTarokk(kCardXX));  // P0 calls (partner P2)
     a.ApplyAction(
-        AnnounceBonusAction(Bonus::kTrull));  // P0: (trull, declarers)
-    a.ApplyAction(kActionAnnouncePass);       // P0 ends its turn
-    SPIEL_CHECK_EQ(a.CurrentPlayer(), 1);     // a defender (side 1)
+        AnnounceBonusAction(Bonus::kFourKings));  // P0: (four kings, declarers)
+    a.ApplyAction(kActionAnnouncePass);           // P0 ends its turn
+    SPIEL_CHECK_EQ(a.CurrentPlayer(), 1);         // a defender (side 1)
     std::vector<Action> legal = a.LegalActions();
-    // The defender may kontra the declarers' trull and the game, but not yet
-    // announce its own trull (its side is not public, and the convention would
-    // attribute the announcement to the declarer's side).
+    // The defender may kontra the declarers' four kings and the game, but not
+    // yet announce its own four kings (its side is not public, and the
+    // convention would attribute the announcement to the declarer's side).
     SPIEL_CHECK_TRUE(
-        Contains(legal, KontraClaimAction(Bonus::kTrull, Side::kDeclarers)));
+        Contains(legal, KontraClaimAction(Bonus::kFourKings, Side::kDeclarers)));
     SPIEL_CHECK_TRUE(Contains(legal, kKontraActionBase + kGameKontraItem));
-    SPIEL_CHECK_FALSE(Contains(legal, AnnounceBonusAction(Bonus::kTrull)));
-    // Kontra-ing reveals P1 as a defender; now it may announce its own trull.
+    SPIEL_CHECK_FALSE(Contains(legal, AnnounceBonusAction(Bonus::kFourKings)));
+    // Kontra-ing reveals P1 as a defender; now it may announce its own bonus.
     a.ApplyAction(
-        KontraClaimAction(Bonus::kTrull, Side::kDeclarers));  // kontra P0's
+        KontraClaimAction(Bonus::kFourKings, Side::kDeclarers));  // kontra P0's
     SPIEL_CHECK_TRUE(a.PublicSide(1) == Side::kDefenders);
     SPIEL_CHECK_TRUE(
-        Contains(a.LegalActions(), AnnounceBonusAction(Bonus::kTrull)));
-    a.ApplyAction(AnnounceBonusAction(Bonus::kTrull));  // P1: (trull, defenders)
+        Contains(a.LegalActions(), AnnounceBonusAction(Bonus::kFourKings)));
+    a.ApplyAction(
+        AnnounceBonusAction(Bonus::kFourKings));  // P1: (four kings, defenders)
     a.ApplyAction(kActionAnnouncePass);
     SPIEL_CHECK_EQ(a.CurrentPlayer(), 2);  // declarer's partner (side 0)
     std::vector<Action> legal2 = a.LegalActions();
-    // The declarers' trull (now level 1) is theirs to rekontra; the defenders'
-    // trull (level 0) is theirs to kontra -- two distinct, unambiguous actions.
-    SPIEL_CHECK_TRUE(
-        Contains(legal2, KontraClaimAction(Bonus::kTrull, Side::kDeclarers)));
-    SPIEL_CHECK_TRUE(
-        Contains(legal2, KontraClaimAction(Bonus::kTrull, Side::kDefenders)));
+    // The declarers' four kings (now level 1) is theirs to rekontra; the
+    // defenders' (level 0) is theirs to kontra -- two distinct, unambiguous
+    // actions.
+    SPIEL_CHECK_TRUE(Contains(
+        legal2, KontraClaimAction(Bonus::kFourKings, Side::kDeclarers)));
+    SPIEL_CHECK_TRUE(Contains(
+        legal2, KontraClaimAction(Bonus::kFourKings, Side::kDefenders)));
     // Rekontra-ing reveals P2 as the partner; P3 is then a defender by
     // elimination (§5.5).
-    a.ApplyAction(KontraClaimAction(Bonus::kTrull, Side::kDeclarers));
+    a.ApplyAction(KontraClaimAction(Bonus::kFourKings, Side::kDeclarers));
     SPIEL_CHECK_TRUE(a.PublicSide(2) == Side::kDeclarers);
     SPIEL_CHECK_TRUE(a.PublicSide(3) == Side::kDefenders);
   }
@@ -652,7 +654,7 @@ void PublicSideDeductionTest() {
     a.ApplyAction(kKontraActionBase + kGameKontraItem);  // P1 kontras -> defender
     a.ApplyAction(kActionAnnouncePass);                  // P1 passes
     a.ApplyAction(kActionAnnouncePass);                  // P2 (partner) passes
-    a.ApplyAction(AnnounceBonusAction(Bonus::kTrull));   // P3 reveals as defender
+    a.ApplyAction(AnnounceBonusAction(Bonus::kFourKings));  // P3 reveals: defender
     SPIEL_CHECK_TRUE(a.PublicSide(1) == Side::kDefenders);
     SPIEL_CHECK_TRUE(a.PublicSide(3) == Side::kDefenders);
     SPIEL_CHECK_TRUE(a.PublicSide(2) == Side::kDeclarers);  // by elimination
@@ -673,7 +675,7 @@ void PublicSideDeductionTest() {
     a.ApplyAction(kKontraActionBase + kGameKontraItem);  // P1 kontras -> defender
     a.ApplyAction(kActionAnnouncePass);                  // P1 passes
     a.ApplyAction(kActionAnnouncePass);                  // P2 passes
-    a.ApplyAction(AnnounceBonusAction(Bonus::kTrull));   // P3 reveals as defender
+    a.ApplyAction(AnnounceBonusAction(Bonus::kFourKings));  // P3 reveals: defender
     SPIEL_CHECK_TRUE(a.PublicSide(1) == Side::kDefenders);
     SPIEL_CHECK_TRUE(a.PublicSide(3) == Side::kDefenders);
     // P2 stays hidden: the declarer might be playing alone.
@@ -697,7 +699,8 @@ void DiscardedTarokkCallTest() {
     discards[2] = {Tarokk(5)};  // P2 discarded the V (an ordinary tarokk)
 
     AnnouncementState a(hands, /*declarer=*/0, Bid::kThree, CalledCard::kNone,
-                        /*pagat_ulti_player=*/kInvalidPlayer, discards);
+                        /*pagat_ulti_player=*/kInvalidPlayer, /*num_bidders=*/0,
+                        discards);
     std::vector<Action> legal = a.LegalActions();
     // The §6.5 free call offers the discarded V and the declarer's own XX, but
     // never an honour or a card the declarer holds.
@@ -732,11 +735,173 @@ void DiscardedTarokkCallTest() {
     discards[1] = {Tarokk(5)};  // some defender discarded a tarokk (enables §6.5)
 
     AnnouncementState a(hands, 0, Bid::kThree, CalledCard::kNone, kInvalidPlayer,
-                        discards);
+                        /*num_bidders=*/0, discards);
     SPIEL_CHECK_TRUE(Contains(a.LegalActions(), CallActionForTarokk(Tarokk(7))));
     a.ApplyAction(CallActionForTarokk(Tarokk(7)));  // P2 holds it -> partner
     SPIEL_CHECK_EQ(a.Partner(), 2);
     SPIEL_CHECK_EQ(a.HivatalbolKontraPlayer(), kInvalidPlayer);
+  }
+}
+
+// The §5.7 honour promises that gate announcing trull
+void TrullPromiseTest() {
+  // Whether the declarer (P0), holding the XX plus the given honours, may
+  // announce trull immediately
+  auto declarer_trull = [](std::vector<Card> declarer_honours, int num_bidders) {
+    std::vector<std::vector<Card>> h(kNumPlayers);
+    h[0] = {kCardXX};
+    for (Card c : declarer_honours) h[0].push_back(c);
+    h[1] = {SuitCard(kHearts, kLow), kCardXIX};
+    h[2] = {SuitCard(kHearts, kJack)};
+    h[3] = {SuitCard(kHearts, kRider)};
+    AnnouncementState a(h, /*declarer=*/0, Bid::kThree, CalledCard::kNone,
+                        kInvalidPlayer, num_bidders);
+    a.ApplyAction(CallActionForTarokk(kCardXIX));
+    return Contains(a.LegalActions(), AnnounceBonusAction(Bonus::kTrull));
+  };
+
+  // C §4.2.1 -- simple game, fewer than three bidders: the declarer's first-round
+  // trull promises BOTH high honours (Skíz and XXI).
+  SPIEL_CHECK_TRUE(declarer_trull({kCardSkiz, kCardXXI}, 2));
+  SPIEL_CHECK_FALSE(declarer_trull({kCardSkiz}, 2));
+  SPIEL_CHECK_FALSE(declarer_trull({kCardXXI}, 2));
+  SPIEL_CHECK_FALSE(declarer_trull({}, 2));
+
+  // C §4.2.1 -- simple game, three bidders: only the Skíz is promised (the
+  // honours are split one-per-bidder, so both high honours cannot be guaranteed).
+  SPIEL_CHECK_TRUE(declarer_trull({kCardSkiz}, 3));
+  SPIEL_CHECK_TRUE(declarer_trull({kCardSkiz, kCardXXI}, 3));
+  SPIEL_CHECK_FALSE(declarer_trull({kCardXXI}, 3));    // must be the Skíz itself
+  SPIEL_CHECK_FALSE(declarer_trull({kCardPagat}, 3));  // pagát is not high
+
+  // Whether the declarer (P0), holding the given honours, may announce trull in
+  // its first round of an INVITED game (P1 holds the cued XIX, the partner).
+  auto invited_declarer_trull = [](std::vector<Card> declarer_honours) {
+    std::vector<std::vector<Card>> h(kNumPlayers);
+    h[0] = {Tarokk(2)};  // declarer; forced to call the XIX
+    for (Card c : declarer_honours) h[0].push_back(c);
+    h[1] = {kCardXX};  // partner
+    h[2] = {SuitCard(kHearts, kJack)};
+    h[3] = {SuitCard(kHearts, kRider)};
+    AnnouncementState a(h, 0, Bid::kThree, CalledCard::kXIX, kInvalidPlayer, 2);
+    a.ApplyAction(CallActionForTarokk(kCardXIX));  // forced call of the cued card
+    return Contains(a.LegalActions(), AnnounceBonusAction(Bonus::kTrull));
+  };
+
+  // C §4.2.2 -- an invited (or yielded) game only promises >= 1 high honour.
+  SPIEL_CHECK_TRUE(invited_declarer_trull({kCardSkiz}));
+  SPIEL_CHECK_TRUE(invited_declarer_trull({kCardXXI}));
+  SPIEL_CHECK_FALSE(invited_declarer_trull({kCardPagat}));  // only a low honour
+  SPIEL_CHECK_FALSE(invited_declarer_trull({}));
+
+  // Whether the simple-game partner (P2, holder of the called XIX) may announce
+  // trull on its first turn, holding the given honours.
+  auto partner_trull = [](std::vector<Card> partner_honours) {
+    std::vector<std::vector<Card>> h(kNumPlayers);
+    h[0] = {kCardXX};  // declarer -> calls the XIX (highest tarokk below the XX)
+    h[1] = {SuitCard(kHearts, kLow)};
+    h[2] = {kCardXIX};  // the partner holds the called card
+    for (Card c : partner_honours) h[2].push_back(c);
+    h[3] = {SuitCard(kHearts, kRider)};
+    AnnouncementState a(h, 0, Bid::kThree, CalledCard::kNone, kInvalidPlayer, 2);
+    a.ApplyAction(CallActionForTarokk(kCardXIX));  // simple call of the XIX
+    SPIEL_CHECK_EQ(a.Partner(), 2);
+    a.ApplyAction(kActionAnnouncePass);    // declarer passes, no announcement
+    a.ApplyAction(kActionAnnouncePass);    // defender P1 passes
+    SPIEL_CHECK_EQ(a.CurrentPlayer(), 2);  // the partner, on its first turn
+    return Contains(a.LegalActions(), AnnounceBonusAction(Bonus::kTrull));
+  };
+
+  // C §4.2.3 -- a simple game's called partner promises >= 1 high honour.
+  SPIEL_CHECK_TRUE(partner_trull({kCardSkiz}));
+  SPIEL_CHECK_TRUE(partner_trull({kCardXXI}));
+  SPIEL_CHECK_FALSE(partner_trull({kCardPagat}));
+  SPIEL_CHECK_FALSE(partner_trull({}));
+
+  // Whether the yielder/partner (P1, holding the XX plus `partner_honours`) may
+  // pick up the trull on its first turn after the declarer declined it.
+  auto pickup_trull = [](std::vector<Card> partner_honours) {
+    std::vector<std::vector<Card>> h(kNumPlayers);
+    h[0] = {SuitCard(kHearts, kLow)};  // declarer -> forced to call the XX
+    h[1] = partner_honours;
+    h[1].push_back(kCardXX);           // the yielder holds the XX
+    h[2] = {SuitCard(kHearts, kJack)};
+    h[3] = {SuitCard(kHearts, kRider)};
+    AnnouncementState a(h, 0, Bid::kTwo, CalledCard::kXX, kInvalidPlayer, 2);
+    a.ApplyAction(CallActionForTarokk(kCardXX));  // forced call of the XX
+    SPIEL_CHECK_EQ(a.Partner(), 1);
+    a.ApplyAction(kActionAnnouncePass);    // declarer passes, no trull announced
+    SPIEL_CHECK_EQ(a.CurrentPlayer(), 1);  // the yielder/partner, first turn
+    return Contains(a.LegalActions(), AnnounceBonusAction(Bonus::kTrull));
+  };
+
+  // C §4.2.2 (Megjegyzés) -- the inviter/yielder picking up a declined trull
+  // promises TWO of the three honours, so a single high honour is not enough.
+  SPIEL_CHECK_TRUE(pickup_trull({kCardSkiz, kCardPagat}));
+  SPIEL_CHECK_TRUE(pickup_trull({kCardSkiz, kCardXXI}));
+  SPIEL_CHECK_FALSE(pickup_trull({kCardSkiz}));   // one honour only
+  SPIEL_CHECK_FALSE(pickup_trull({kCardPagat}));  // one honour only
+
+  // C §4.2.4 / §5.7 -- a defender's trull needs >= 1 high honour AND the defender
+  // must reveal its side first. Play-alone game: P0 calls its own XX.
+  {
+    std::vector<std::vector<Card>> h(kNumPlayers);
+    h[0] = {kCardXX};                            // declarer plays alone
+    h[1] = {kCardXXI, SuitCard(kHearts, kLow)};  // a defender with a high honour
+    h[2] = {SuitCard(kHearts, kJack)};
+    h[3] = {SuitCard(kHearts, kRider)};
+    AnnouncementState a(h, 0, Bid::kThree, CalledCard::kNone, kInvalidPlayer, 2);
+    a.ApplyAction(CallActionForTarokk(kCardXX));  // play alone
+    a.ApplyAction(kActionAnnouncePass);           // declarer passes
+    SPIEL_CHECK_EQ(a.CurrentPlayer(), 1);
+    // P1's side is not yet public, so it may not announce trull for its own side
+    // until it reveals with a kontra.
+    SPIEL_CHECK_FALSE(
+        Contains(a.LegalActions(), AnnounceBonusAction(Bonus::kTrull)));
+    a.ApplyAction(kKontraActionBase + kGameKontraItem);  // reveal as a defender
+    SPIEL_CHECK_TRUE(a.PublicSide(1) == Side::kDefenders);
+    // Holding the XXI, it may now announce its trull.
+    SPIEL_CHECK_TRUE(
+        Contains(a.LegalActions(), AnnounceBonusAction(Bonus::kTrull)));
+  }
+  // A defender with no high honour cannot announce trull even after revealing.
+  {
+    std::vector<std::vector<Card>> h(kNumPlayers);
+    h[0] = {kCardXX};
+    h[1] = {Tarokk(5), SuitCard(kHearts, kLow)};  // defender, no high honour
+    h[2] = {SuitCard(kHearts, kJack)};
+    h[3] = {SuitCard(kHearts, kRider)};
+    AnnouncementState a(h, 0, Bid::kThree, CalledCard::kNone, kInvalidPlayer, 2);
+    a.ApplyAction(CallActionForTarokk(kCardXX));
+    a.ApplyAction(kActionAnnouncePass);
+    a.ApplyAction(kKontraActionBase + kGameKontraItem);  // reveal as a defender
+    SPIEL_CHECK_TRUE(a.PublicSide(1) == Side::kDefenders);
+    SPIEL_CHECK_FALSE(
+        Contains(a.LegalActions(), AnnounceBonusAction(Bonus::kTrull)));
+  }
+
+  // The strict first-round promise relaxes to the second-round rule (>= 1 high
+  // honour, C §4.2.4) on a later turn: a declarer holding only the Skíz cannot
+  // announce trull in the first round of a simple <3-bidder game (both high
+  // honours required) but may once it comes back around.
+  {
+    std::vector<std::vector<Card>> h(kNumPlayers);
+    h[0] = {kCardXX, kCardSkiz};  // declarer, one high honour, plays alone
+    h[1] = {SuitCard(kHearts, kLow)};
+    h[2] = {SuitCard(kHearts, kJack)};
+    h[3] = {SuitCard(kHearts, kRider)};
+    AnnouncementState a(h, 0, Bid::kThree, CalledCard::kNone, kInvalidPlayer, 2);
+    a.ApplyAction(CallActionForTarokk(kCardXX));  // play alone
+    SPIEL_CHECK_FALSE(  // first round: only the Skíz -> refused
+        Contains(a.LegalActions(), AnnounceBonusAction(Bonus::kTrull)));
+    a.ApplyAction(kActionAnnouncePass);                  // P0 ends its first turn
+    a.ApplyAction(kKontraActionBase + kGameKontraItem);  // P1 keeps the phase alive
+    a.ApplyAction(kActionAnnouncePass);                  // P1
+    a.ApplyAction(kActionAnnouncePass);                  // P2
+    a.ApplyAction(kActionAnnouncePass);                  // P3
+    SPIEL_CHECK_EQ(a.CurrentPlayer(), 0);  // back to the declarer, second round
+    SPIEL_CHECK_TRUE(  // second round: >= 1 high honour suffices
+        Contains(a.LegalActions(), AnnounceBonusAction(Bonus::kTrull)));
   }
 }
 
@@ -752,5 +917,6 @@ int main(int argc, char** argv) {
   open_spiel::hungarian_tarokk::MandatoryAnnouncementTest();
   open_spiel::hungarian_tarokk::PublicSideDeductionTest();
   open_spiel::hungarian_tarokk::DiscardedTarokkCallTest();
+  open_spiel::hungarian_tarokk::TrullPromiseTest();
   open_spiel::hungarian_tarokk::BasicHungarianTarokkTests();
 }
