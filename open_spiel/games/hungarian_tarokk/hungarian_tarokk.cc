@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -796,6 +797,134 @@ void HungarianTarokkState::ObservationTensor(Player player,
   }
 
   SPIEL_CHECK_EQ(pos, kObservationTensorSize);
+}
+
+std::unique_ptr<ObservationStruct> HungarianTarokkState::ToObservationStruct(
+    Player player) const {
+  SPIEL_CHECK_GE(player, 0);
+  SPIEL_CHECK_LT(player, kNumPlayers);
+  constexpr int N = kNumPlayers;
+  auto obs = std::make_unique<HungarianTarokkObservationStruct>();
+  obs->observing_player = player;
+
+  const bool ann_ready =
+      (phase_ == Phase::kAnnouncements || phase_ == Phase::kPlaying ||
+       phase_ == Phase::kFinished) &&
+      declarer_ != kInvalidPlayer && !annulled_;
+  const auto seat = [](Player p) { return p < 0 ? -1 : static_cast<int>(p); };
+  const auto side_name = [](Side s) {
+    return s == Side::kDeclarers ? "declarers" : "defenders";
+  };
+
+  // Phase, whose turn it is, and the observer's own hand.
+  obs->phase = PhaseToString(phase_);
+  obs->current_player = seat(CurrentPlayer());
+  for (Card c : CurrentHands()[player]) obs->hand.push_back(CardToString(c));
+
+  // Auction: declarer, the winning (or standing) bid, the obligatory call, then
+  // the seven bid-slots replayed from the history (see ObservationTensor).
+  obs->declarer = seat(declarer_);
+  if (declarer_ != kInvalidPlayer) {
+    obs->bid = BidToString(winning_bid_);
+  } else if (phase_ == Phase::kBidding && bidding_.StandingBid().has_value()) {
+    obs->bid = BidToString(*bidding_.StandingBid());
+  }
+  obs->obligatory_call = CalledCardToString(bidding_.ObligatoryCalledCard());
+  constexpr int kNumBidSlots = 2 * kNumBids - 1;
+  obs->bid_slots.assign(kNumBidSlots, -1);
+  auto bid_slot = [](Bid b) {
+    const int i = static_cast<int>(b);
+    return i > 0 ? i * 2 - 1 : 0;
+  };
+  Bid highest_bid = kWeakestBid;  // a hold can never precede the first bid
+  for (auto it = BiddingHistoryBegin(); it != BiddingHistoryEnd(); ++it) {
+    if (it->action == kActionPass) continue;  // dropped out, not a slot
+    if (it->action == kActionHold) {
+      obs->bid_slots[bid_slot(highest_bid) + 1] = it->player;
+    } else {
+      highest_bid = ActionToBid(it->action);
+      obs->bid_slots[bid_slot(highest_bid)] = it->player;
+    }
+  }
+
+  // Announcements (defaults until that phase is reached). The called tarokk, the
+  // publicly-known sides (with the observer's own side revealed if it holds the
+  // called card), the tarokk-count declarations, the hivatalból kontra, then the
+  // bonus announcements with their kontra levels and the game kontra.
+  const Card called =
+      ann_ready ? announcements_.CalledCardTarokk() : kInvalidCard;
+  const Player partner = ann_ready ? announcements_.Partner() : kInvalidPlayer;
+  if (called != kInvalidCard) obs->called_tarokk = CardToString(called);
+  for (Player q = 0; q < N; ++q) {
+    std::string s = "unknown";
+    if (declarer_ != kInvalidPlayer && q == declarer_) s = "declarers";
+    if (ann_ready) {
+      absl::optional<Side> sd = announcements_.PublicSide(q);
+      if (sd.has_value()) s = side_name(*sd);
+      if (q == player && called != kInvalidCard) {
+        s = (q == declarer_ || q == partner) ? "declarers" : "defenders";
+      }
+    }
+    obs->sides.push_back(s);
+  }
+  for (Player q = 0; q < N; ++q) {
+    obs->declared_tarokks.push_back(
+        ann_ready ? announcements_.DeclaredTarokks(q) : 0);
+  }
+  obs->hivatalbol_kontra =
+      ann_ready ? seat(announcements_.HivatalbolKontraPlayer()) : -1;
+  if (ann_ready) {
+    for (int b = 0; b < kNumBonuses; ++b) {
+      for (int s = 0; s < 2; ++s) {
+        const Bonus bonus = static_cast<Bonus>(b);
+        const Side side = static_cast<Side>(s);
+        if (!announcements_.BonusAnnounced(bonus, side)) continue;
+        obs->bonus_announcements.push_back(HungarianTarokkBonusAnnouncement{
+            BonusToString(bonus), side_name(side),
+            announcements_.BonusKontraLevel(bonus, side)});
+      }
+    }
+  }
+  obs->game_kontra = ann_ready ? announcements_.GameKontraLevel() : 0;
+
+  // §6.3 discarded-tarokk counts and §6.4 the declarer's face-up skart tarokks.
+  const std::vector<std::vector<Card>>& discards = CurrentDiscards();
+  for (Player q = 0; q < N; ++q) {
+    int n = 0;
+    for (Card c : discards[q]) {
+      if (IsTarokk(c)) ++n;
+    }
+    obs->discard_tarokk_counts.push_back(n);
+  }
+  const bool skart_shown =
+      declarer_ != kInvalidPlayer &&
+      (phase_ == Phase::kAnnouncements ||
+       (phase_ == Phase::kPlaying && completed_tricks_.empty()));
+  if (skart_shown) {
+    for (Card c : discards[declarer_]) {
+      if (IsTarokk(c)) obs->declarer_shown_tarokks.push_back(CardToString(c));
+    }
+  }
+
+  // Trick play: each player's card (by absolute seat) in the trick in progress
+  // and in the last completed one; the last trick's winner is the current
+  // trick's leader, so it is not repeated -- exactly as the tensor.
+  obs->current_trick.assign(N, std::nullopt);
+  for (int i = 0; i < static_cast<int>(trick_cards_.size()); ++i) {
+    obs->current_trick[(trick_leader_ + i) % N] = CardToString(trick_cards_[i]);
+  }
+  obs->current_trick_leader = trick_cards_.empty() ? -1 : seat(trick_leader_);
+  obs->last_trick.assign(N, std::nullopt);
+  if (!completed_tricks_.empty()) {
+    const Player last_leader = trick_winners_.size() > 1
+                                   ? trick_winners_[trick_winners_.size() - 2]
+                                   : 0;
+    const std::vector<Card>& t = completed_tricks_.back();
+    for (int i = 0; i < static_cast<int>(t.size()); ++i) {
+      obs->last_trick[(last_leader + i) % N] = CardToString(t[i]);
+    }
+  }
+  return obs;
 }
 
 std::unique_ptr<State> HungarianTarokkState::Clone() const {

@@ -1,7 +1,6 @@
 #include "open_spiel/games/hungarian_tarokk/hungarian_tarokk.h"
 
 #include <algorithm>
-#include <cmath>
 #include <memory>
 #include <random>
 #include <vector>
@@ -1160,9 +1159,10 @@ void ScoringTest() {
   }
 }
 
-// The string and tensor observations across random rollouts through every
-// phase: ObservationTensor fills a span of the advertised shape without
-// tripping its internal layout check, and the string is never empty.
+// The string, tensor and struct observations across random rollouts through
+// every phase: ObservationTensor fills a span of the advertised shape without
+// tripping its internal layout check, the string is never empty, and the struct
+// records the observing player and round-trips losslessly through its JSON.
 void ObservationTest() {
   std::mt19937 rng(20260714);
   std::shared_ptr<const Game> game = LoadGame("hungarian_tarokk");
@@ -1176,6 +1176,10 @@ void ObservationTest() {
           SPIEL_CHECK_FALSE(state->ObservationString(p).empty());
           std::vector<float> tensor(kObservationTensorSize);
           state->ObservationTensor(p, absl::MakeSpan(tensor));
+          const std::string json = state->ToObservationStruct(p)->ToJson();
+          const HungarianTarokkObservationStruct obs(json);
+          SPIEL_CHECK_EQ(obs.observing_player, p);
+          SPIEL_CHECK_EQ(obs.ToJson(), json);
         }
       }
       if (state->IsTerminal()) break;

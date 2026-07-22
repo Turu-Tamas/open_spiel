@@ -3,6 +3,7 @@
 
 #include <array>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -64,6 +65,82 @@ inline constexpr int kObservationTensorSize =
     kNumCards + kNumPlayers * (kNumCards + 1) + kNumPlayers +
     kNumPlayers * (kNumCards + 1);
 
+// A structured, human-readable form of the observation. It carries exactly the
+// facts ObservationTensor encodes (see the layout comment above), but as named
+// fields with intuitive values -- card names, bid / side labels, plain player
+// indices -- instead of a flat float vector. Players are identified by absolute
+// seat 0..3 (-1 = "none"); `observing_player` records whose observation this is.
+// Only what the observer may see is filled in: their own hand alone, the
+// publicly-known sides, the declarer's face-up skart, and so on -- matching the
+// tensor.
+
+// One announced bonus (§5.2) together with its kontra chain (§5.3).
+struct HungarianTarokkBonusAnnouncement {
+  std::string bonus;  // Trull, FourKings, PagatUlti, XxiCatch, DoubleGame, Volat
+  std::string side;   // "declarers" or "defenders"
+  int kontra_level;   // 0 = announced (no kontra), 1 = kontra, 2 = rekontra, ...
+  NLOHMANN_DEFINE_TYPE_INTRUSIVE(HungarianTarokkBonusAnnouncement, bonus, side,
+                                 kontra_level);
+};
+
+struct HungarianTarokkObservationContents {
+  std::string phase;
+  int current_player;             // whose turn (0..3, or -1 when nobody's)
+  std::vector<std::string> hand;  // the observer's own cards
+
+  // Auction.
+  int declarer;                    // 0..3, or -1 until the auction decides one
+  std::optional<std::string> bid;  // the winning bid, or the standing bid while
+                                   // bidding; nullopt before anyone has bid
+  std::string obligatory_call;     // "none", "XIX", "XVIII" or "XX"
+  // Which player (0..3, or -1) last reached each of the seven bid-slots, in
+  // order: bid-3, bid-2, hold-2, bid-1, hold-1, bid-solo, hold-solo.
+  std::vector<int> bid_slots;
+
+  // Announcements (defaults until that phase is reached).
+  std::optional<std::string> called_tarokk;  // the called partner card
+  std::vector<std::string> sides;         // per player: "declarers", "defenders"
+                                          // or "unknown"
+  std::vector<int> declared_tarokks;      // per player: 0, 8 or 9 (tarokkszám)
+  int hivatalbol_kontra;                  // player 0..3 who kontra'd by office,
+                                          // or -1
+  std::vector<HungarianTarokkBonusAnnouncement> bonus_announcements;
+  int game_kontra;                        // 0 = none, 1 = kontra, 2 = rekontra..
+
+  // Talon / skart and trick play.
+  std::vector<int> discard_tarokk_counts;           // per player: tarokks in skart
+  std::vector<std::string> declarer_shown_tarokks;  // face-up skart tarokks (§6.4)
+  // The card each player has played in the trick in progress (null = not yet),
+  // the player leading it (-1 if none), and likewise for the last completed
+  // trick. Both are indexed by absolute seat.
+  std::vector<std::optional<std::string>> current_trick;
+  int current_trick_leader;
+  std::vector<std::optional<std::string>> last_trick;
+
+  NLOHMANN_DEFINE_TYPE_INTRUSIVE(
+      HungarianTarokkObservationContents, phase, current_player, hand, declarer,
+      bid, obligatory_call, bid_slots, called_tarokk, sides, declared_tarokks,
+      hivatalbol_kontra, bonus_announcements, game_kontra, discard_tarokk_counts,
+      declarer_shown_tarokks, current_trick, current_trick_leader, last_trick);
+};
+
+struct HungarianTarokkObservationStruct : ObservationStruct,
+                                          HungarianTarokkObservationContents {
+  HungarianTarokkObservationStruct() = default;
+  explicit HungarianTarokkObservationStruct(const std::string& json_str) {
+    nlohmann::json data = nlohmann::json::parse(json_str);
+    data.get_to(static_cast<HungarianTarokkObservationContents&>(*this));
+    observing_player = data.value("observing_player", -1);
+  }
+  nlohmann::json to_json_base() const override {
+    nlohmann::json j =
+        static_cast<const HungarianTarokkObservationContents&>(*this);
+    j["observing_player"] = observing_player;
+    return j;
+  }
+  int observing_player = -1;
+};
+
 class HungarianTarokkState : public State {
  public:
   explicit HungarianTarokkState(std::shared_ptr<const Game> game);
@@ -79,6 +156,8 @@ class HungarianTarokkState : public State {
   std::string ObservationString(Player player) const override;
   void ObservationTensor(Player player,
                          absl::Span<float> values) const override;
+  std::unique_ptr<ObservationStruct> ToObservationStruct(
+      Player player) const override;
   std::unique_ptr<State> Clone() const override;
   ActionsAndProbs ChanceOutcomes() const override;
 
