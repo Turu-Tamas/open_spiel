@@ -127,8 +127,9 @@ struct HungarianTarokkObservationContents {
 struct HungarianTarokkObservationStruct : ObservationStruct,
                                           HungarianTarokkObservationContents {
   HungarianTarokkObservationStruct() = default;
-  explicit HungarianTarokkObservationStruct(const std::string& json_str) {
-    nlohmann::json data = nlohmann::json::parse(json_str);
+  explicit HungarianTarokkObservationStruct(const std::string& json_str)
+      : HungarianTarokkObservationStruct(nlohmann::json::parse(json_str)) {}
+  explicit HungarianTarokkObservationStruct(const nlohmann::json& data) {
     data.get_to(static_cast<HungarianTarokkObservationContents&>(*this));
     observing_player = data.value("observing_player", -1);
   }

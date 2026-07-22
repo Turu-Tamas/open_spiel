@@ -73,6 +73,8 @@ set(PYTHON_BINDINGS ${PYTHON_BINDINGS}
   pybind11/games_gomoku.h
   pybind11/games_hearts.cc
   pybind11/games_hearts.h
+  pybind11/games_hungarian_tarokk.cc
+  pybind11/games_hungarian_tarokk.h
   pybind11/games_kuhn_poker.cc
   pybind11/games_kuhn_poker.h
   pybind11/games_leduc_poker.cc
