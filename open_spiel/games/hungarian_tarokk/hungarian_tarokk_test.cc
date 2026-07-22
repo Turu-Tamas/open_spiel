@@ -1161,8 +1161,8 @@ void ScoringTest() {
 }
 
 // The string and tensor observations across random rollouts through every
-// phase: the tensor has the advertised shape, holds only normalised [0, 1]
-// values, and the string is never empty.
+// phase: ObservationTensor fills a span of the advertised shape without
+// tripping its internal layout check, and the string is never empty.
 void ObservationTest() {
   std::mt19937 rng(20260714);
   std::shared_ptr<const Game> game = LoadGame("hungarian_tarokk");
@@ -1176,8 +1176,6 @@ void ObservationTest() {
           SPIEL_CHECK_FALSE(state->ObservationString(p).empty());
           std::vector<float> tensor(kObservationTensorSize);
           state->ObservationTensor(p, absl::MakeSpan(tensor));
-          SPIEL_CHECK_EQ(static_cast<int>(tensor.size()),
-                         kObservationTensorSize);
         }
       }
       if (state->IsTerminal()) break;

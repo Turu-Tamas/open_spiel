@@ -481,31 +481,51 @@ std::string HungarianTarokkState::ObservationString(Player player) const {
        phase_ == Phase::kFinished) &&
       declarer_ != kInvalidPlayer && !annulled_;
 
+  // Phase, whose turn it is, and the observer's own hand.
   std::string str = absl::StrCat("P", player, " ", PhaseToString(phase_),
                                  " turn:", PlayerLabel(CurrentPlayer()));
   absl::StrAppend(&str, " | hand: ", CardsToString(CurrentHands()[player]));
 
-  // Auction: the outcome (or the standing bid while bidding) and every player's
-  // highest bid, all carried forward so a skipped bidder sees it in later
-  // turns.
+  // Auction: declarer, the winning (or, while bidding, the standing) bid, the
+  // obligatory call, then the seven bid-slots -- 3, 2, hold@2, 1, hold@1, solo,
+  // hold@solo -- replayed from the history (so a skipped bidder still sees the
+  // whole auction here). Each slot shows the player who reached it, or "-".
   absl::StrAppend(&str, " | declarer:", PlayerLabel(declarer_));
   if (declarer_ != kInvalidPlayer) {
     absl::StrAppend(&str, " bid:", BidToString(winning_bid_));
   } else if (phase_ == Phase::kBidding && bidding_.StandingBid().has_value()) {
     absl::StrAppend(&str, " bid:", BidToString(*bidding_.StandingBid()));
   }
-  std::vector<std::string> bids;
-  for (Player q = 0; q < kNumPlayers; ++q) {
-    absl::optional<Bid> b = bidding_.PlayerBid(q);
-    bids.push_back(b.has_value() ? BidToString(*b) : "-");
-  }
-  absl::StrAppend(&str, " bids:[", absl::StrJoin(bids, ","), "]");
   if (bidding_.ObligatoryCalledCard() != CalledCard::kNone) {
     absl::StrAppend(
         &str, " oblig:", CalledCardToString(bidding_.ObligatoryCalledCard()));
   }
+  constexpr int kNumBidSlots = 2 * kNumBids - 1;
+  std::array<Player, kNumBidSlots> bid_players;
+  bid_players.fill(kInvalidPlayer);
+  auto bid_slot = [](Bid b) {
+    const int i = static_cast<int>(b);
+    return i > 0 ? i * 2 - 1 : 0;
+  };
+  Bid highest_bid = kWeakestBid;  // a hold can never precede the first bid
+  for (auto it = BiddingHistoryBegin(); it != BiddingHistoryEnd(); ++it) {
+    if (it->action == kActionPass) continue;  // dropped out, not a slot
+    if (it->action == kActionHold) {
+      bid_players[bid_slot(highest_bid) + 1] = it->player;
+    } else {
+      highest_bid = ActionToBid(it->action);
+      bid_players[bid_slot(highest_bid)] = it->player;
+    }
+  }
+  std::vector<std::string> slots;
+  slots.reserve(kNumBidSlots);
+  for (Player p : bid_players) slots.push_back(PlayerLabel(p));
+  absl::StrAppend(&str, " bidders:[", absl::StrJoin(slots, ","), "]");
 
   if (ann_ready) {
+    // Called tarokk, the publicly-known sides, the tarokk-count declarations,
+    // the hivatalból kontra, then the bonus announcements (with their kontra
+    // levels) and the game kontra.
     const Card called = announcements_.CalledCardTarokk();
     if (called != kInvalidCard) {
       absl::StrAppend(&str, " | called:", CardToString(called));
@@ -523,6 +543,19 @@ std::string HungarianTarokkState::ObservationString(Player player) const {
                                       : (*sd == Side::kDeclarers ? "D" : "d"));
     }
     absl::StrAppend(&str, " sides:[", absl::StrJoin(sides, ","), "]");
+    std::vector<std::string> decl;
+    bool any_decl = false;
+    for (Player q = 0; q < kNumPlayers; ++q) {
+      const int d = announcements_.DeclaredTarokks(q);
+      decl.push_back(d ? absl::StrCat(d) : "-");
+      if (d) any_decl = true;
+    }
+    if (any_decl) {
+      absl::StrAppend(&str, " tarokks:[", absl::StrJoin(decl, ","), "]");
+    }
+    if (announcements_.HivatalbolKontraPlayer() != kInvalidPlayer) {
+      absl::StrAppend(&str, " hiv:P", announcements_.HivatalbolKontraPlayer());
+    }
     std::vector<std::string> anns;
     for (int b = 0; b < kNumBonuses; ++b) {
       for (int s = 0; s < 2; ++s) {
@@ -540,22 +573,10 @@ std::string HungarianTarokkState::ObservationString(Player player) const {
     if (announcements_.GameKontraLevel() > 0) {
       absl::StrAppend(&str, " gk:", announcements_.GameKontraLevel());
     }
-    if (announcements_.HivatalbolKontraPlayer() != kInvalidPlayer) {
-      absl::StrAppend(&str, " hiv:P", announcements_.HivatalbolKontraPlayer());
-    }
-    std::vector<std::string> decl;
-    bool any_decl = false;
-    for (Player q = 0; q < kNumPlayers; ++q) {
-      const int d = announcements_.DeclaredTarokks(q);
-      decl.push_back(d ? absl::StrCat(d) : "-");
-      if (d) any_decl = true;
-    }
-    if (any_decl) {
-      absl::StrAppend(&str, " tarokks:[", absl::StrJoin(decl, ","), "]");
-    }
   }
 
-  // §6.3 discarded-tarokk counts and §6.4 the declarer's face-up skart tarokks.
+  // §6.3 discarded-tarokk counts and §6.4 the declarer's face-up skart tarokks
+  // (shown only until the first trick completes, matching the tensor).
   const std::vector<std::vector<Card>>& discards = CurrentDiscards();
   bool any_discard = false;
   std::vector<std::string> counts;
@@ -573,8 +594,7 @@ std::string HungarianTarokkState::ObservationString(Player player) const {
   const bool skart_shown =
       declarer_ != kInvalidPlayer &&
       (phase_ == Phase::kAnnouncements ||
-       (phase_ == Phase::kPlaying && completed_tricks_.empty() &&
-        trick_cards_.empty()));
+       (phase_ == Phase::kPlaying && completed_tricks_.empty()));
   if (skart_shown) {
     std::vector<Card> st;
     for (Card c : discards[declarer_]) {
@@ -583,20 +603,19 @@ std::string HungarianTarokkState::ObservationString(Player player) const {
     if (!st.empty()) absl::StrAppend(&str, " shown:", CardsToString(st));
   }
 
-  // Play: the trick that completed while the player was skipped, then the one
-  // in progress now.
-  if (!completed_tricks_.empty()) {
-    absl::StrAppend(&str, " | last:", CardsToString(completed_tricks_.back()),
-                    " won:P", trick_winners_.back());
-  }
+  // Play: the trick in progress (with its leader), then the most-recent
+  // completed trick (with the player who led it). The last trick's winner is
+  // the current trick's leader, so it is not repeated -- exactly as the tensor.
   if (!trick_cards_.empty()) {
     absl::StrAppend(&str, " | trick(P", trick_leader_,
                     "): ", CardsToString(trick_cards_));
   }
-  absl::StrAppend(&str, " | points:[", absl::StrJoin(collected_points_, ","),
-                  "]");
-  if (IsTerminal()) {
-    absl::StrAppend(&str, " | returns:[", absl::StrJoin(Returns(), ","), "]");
+  if (!completed_tricks_.empty()) {
+    const Player last_leader = trick_winners_.size() > 1
+                                   ? trick_winners_[trick_winners_.size() - 2]
+                                   : 0;
+    absl::StrAppend(&str, " | last(P", last_leader,
+                    "): ", CardsToString(completed_tricks_.back()));
   }
   return str;
 }
@@ -607,7 +626,6 @@ void HungarianTarokkState::ObservationTensor(Player player,
   SPIEL_CHECK_LT(player, kNumPlayers);
   SPIEL_CHECK_EQ(static_cast<int>(values.size()), kObservationTensorSize);
   std::fill(values.begin(), values.end(), 0.0f);
-  constexpr int kMaxKontra = 4;  // kontra .. hirskontra
   constexpr int N = kNumPlayers;
   // Players are encoded relative to the observer (0 = self); -1 marks "none".
   auto rel = [&](Player q) { return q < 0 ? -1 : (q - player + N) % N; };
@@ -680,9 +698,8 @@ void HungarianTarokkState::ObservationTensor(Player player,
     bid_players[slot] = rel(bid_it->player);
   }
   for (int slot = 0; slot < kNumBidSlots; ++slot) {
-    scalar(bid_players[slot] < 0
-               ? 0.0f
-               : static_cast<float>(bid_players[slot] + 1));
+    scalar(bid_players[slot] < 0 ? 0.0f
+                                 : static_cast<float>(bid_players[slot] + 1));
   }
 
   // Announcements (all guarded: the sub-state's arrays are only valid once its
@@ -726,11 +743,10 @@ void HungarianTarokkState::ObservationTensor(Player player,
       const int k = ann_ready ? announcements_.BonusKontraLevel(
                                     static_cast<Bonus>(b), static_cast<Side>(s))
                               : 0;
-      scalar(static_cast<float>(k) / kMaxKontra);
+      scalar(static_cast<float>(k));
     }
   }
-  scalar(ann_ready ? static_cast<float>(announcements_.GameKontraLevel()) /
-                         kMaxKontra
+  scalar(ann_ready ? static_cast<float>(announcements_.GameKontraLevel())
                    : 0.0f);
 
   // §6.3 discarded-tarokk counts, §6.4 the declarer's shown skart, the points.
@@ -740,7 +756,7 @@ void HungarianTarokkState::ObservationTensor(Player player,
     for (Card c : discards[(player + r) % N]) {
       if (IsTarokk(c)) ++n;
     }
-    scalar(static_cast<float>(n) / kTalonSize);
+    scalar(static_cast<float>(n));
   }
   const bool skart_shown =
       declarer_ != kInvalidPlayer &&
@@ -770,8 +786,10 @@ void HungarianTarokkState::ObservationTensor(Player player,
   player_plain(trick_cards_.empty() ? kInvalidPlayer : trick_leader_);
   if (!completed_tricks_.empty()) {
     Player last_leader;
-    if (trick_winners_.size() > 1) last_leader = trick_winners_[trick_winners_.size() - 2];
-    else last_leader = 0;  // the forehand led the first trick
+    if (trick_winners_.size() > 1)
+      last_leader = trick_winners_[trick_winners_.size() - 2];
+    else
+      last_leader = 0;  // the forehand led the first trick
     add_trick(completed_tricks_.back(), last_leader);
   } else {
     pos += (kNumCards + 1) * kNumPlayers;

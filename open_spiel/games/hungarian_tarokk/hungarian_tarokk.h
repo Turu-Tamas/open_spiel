@@ -46,10 +46,12 @@ enum class Phase {
 // announcements only accumulate, discards and points only grow -- plus the one
 // most-recent completed trick, a single snapshot always conveys everything that
 // happened since the player's previous turn. In particular the whole auction
-// (each player's highest bid and its outcome) persists into every later block,
-// so a player skipped during the bidding still sees the complete result here.
+// (which player reached each bid-slot, and its outcome) persists into every
+// later block, so a player skipped during the bidding still sees it here.
 // Players are encoded relative to the observer (self = 0); the trailing slot of
-// a player one-hot marked (+1) is "none". The blocks, in order:
+// a player one-hot marked (+1) is "none". Index-valued blocks (the bid-slots,
+// the kontra levels and the discard counts) hold raw values, not normalised
+// ones. The blocks, in order:
 //   phase(6) current-player(4) own-hand(42) declarer(5) bid(5) obligatory(4)
 //   bidders(7) called-tarokk(23) sides(4x3) tarokk-declarations(4x3)
 //   hivatalbol(5) bonus-announced(6x2) bonus-kontra(6x2) game-kontra(1)
@@ -57,10 +59,10 @@ enum class Phase {
 //   current-trick(4x43) current-trick-leader(4) last-trick(4x43)
 inline constexpr int kObservationTensorSize =
     6 + kNumPlayers + kNumCards + (kNumPlayers + 1) + (kNumBids + 1) + 4 +
-    (2 * kNumBids - 1) + (kNumTarokks + 1) + kNumPlayers * 3 +
-    kNumPlayers * 3 + (kNumPlayers + 1) + kNumBonuses * 2 + kNumBonuses * 2 +
-    1 + kNumPlayers + kNumCards + kNumPlayers * (kNumCards + 1) +
-    kNumPlayers + kNumPlayers * (kNumCards + 1);
+    (2 * kNumBids - 1) + (kNumTarokks + 1) + kNumPlayers * 3 + kNumPlayers * 3 +
+    (kNumPlayers + 1) + kNumBonuses * 2 + kNumBonuses * 2 + 1 + kNumPlayers +
+    kNumCards + kNumPlayers * (kNumCards + 1) + kNumPlayers +
+    kNumPlayers * (kNumCards + 1);
 
 class HungarianTarokkState : public State {
  public:
