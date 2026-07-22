@@ -32,7 +32,7 @@ const GameType kGameType{/*short_name=*/"hungarian_tarokk",
                          /*provides_information_state_string=*/true,
                          /*provides_information_state_tensor=*/false,
                          /*provides_observation_string=*/true,
-                         /*provides_observation_tensor=*/false,
+                         /*provides_observation_tensor=*/true,
                          /*parameter_specification=*/{}};
 
 std::shared_ptr<const Game> Factory(const GameParameters& params) {
@@ -58,6 +58,8 @@ std::string PhaseToString(Phase phase) {
   }
   SpielFatalError("Unknown phase.");
 }
+
+std::string PlayerLabel(Player p) { return p < 0 ? "-" : absl::StrCat("P", p); }
 
 // The bidding action ids live immediately after the card action ids.
 static_assert(kBiddingActionBase == kNumCards,
@@ -175,6 +177,9 @@ void HungarianTarokkState::DoApplyAction(Action action_id) {
       }
       bidding_ = BiddingState(info);
       phase_ = Phase::kBidding;
+      // history_ is appended with the current (final dealing) action only after
+      // DoApplyAction returns, so the first bidding action lands at size() + 1.
+      bidding_history_start_ = history_.size() + 1;
     }
     return;
   }
@@ -193,6 +198,9 @@ void HungarianTarokkState::DoApplyAction(Action action_id) {
             std::move(players_cards_), std::move(talon_), declarer_,
             winning_bid_, bidding_.CueBidder(), bidding_.CuedCard());
         phase_ = Phase::kTalonExchange;
+        // As above: the current (final bidding) action is appended after this
+        // returns, so the one-past-the-last index is size() + 1.
+        bidding_history_end_ = history_.size() + 1;
       }
     }
     return;
@@ -347,8 +355,8 @@ DealScore HungarianTarokkState::BuildDealScore() const {
     d.pagat_last_trick = 0;
   }
 
-  // XXI-catch: the Skíz took the opponents' XXI in the same trick (§5.2 -- not a
-  // catch when the two fall together from partners).
+  // XXI-catch: the Skíz took the opponents' XXI in the same trick (§5.2 -- not
+  // a catch when the two fall together from partners).
   const Player xxi_player = player_of[kCardXXI.index];
   const Player skiz_player = player_of[kCardSkiz.index];
   if (trick_of[kCardXXI.index] == trick_of[kCardSkiz.index] &&
@@ -466,15 +474,310 @@ std::string HungarianTarokkState::InformationStateString(Player player) const {
 std::string HungarianTarokkState::ObservationString(Player player) const {
   SPIEL_CHECK_GE(player, 0);
   SPIEL_CHECK_LT(player, kNumPlayers);
-  std::string str = absl::StrCat(
-      "P", player, " hand: ", CardsToString(CurrentHands()[player]),
-      " | skart: ", CardsToString(CurrentDiscards()[player]),
-      " | bidding: ", bidding_.ToString());
-  if (!trick_cards_.empty()) {
-    absl::StrAppend(&str, " | trick: ", CardsToString(trick_cards_));
+  // The announcement sub-state is only meaningful once that phase is reached
+  // (and never for a passed-out / annulled hand).
+  const bool ann_ready =
+      (phase_ == Phase::kAnnouncements || phase_ == Phase::kPlaying ||
+       phase_ == Phase::kFinished) &&
+      declarer_ != kInvalidPlayer && !annulled_;
+
+  std::string str = absl::StrCat("P", player, " ", PhaseToString(phase_),
+                                 " turn:", PlayerLabel(CurrentPlayer()));
+  absl::StrAppend(&str, " | hand: ", CardsToString(CurrentHands()[player]));
+
+  // Auction: the outcome (or the standing bid while bidding) and every player's
+  // highest bid, all carried forward so a skipped bidder sees it in later
+  // turns.
+  absl::StrAppend(&str, " | declarer:", PlayerLabel(declarer_));
+  if (declarer_ != kInvalidPlayer) {
+    absl::StrAppend(&str, " bid:", BidToString(winning_bid_));
+  } else if (phase_ == Phase::kBidding && bidding_.StandingBid().has_value()) {
+    absl::StrAppend(&str, " bid:", BidToString(*bidding_.StandingBid()));
   }
-  absl::StrAppend(&str, " | points: ", absl::StrJoin(collected_points_, ","));
+  std::vector<std::string> bids;
+  for (Player q = 0; q < kNumPlayers; ++q) {
+    absl::optional<Bid> b = bidding_.PlayerBid(q);
+    bids.push_back(b.has_value() ? BidToString(*b) : "-");
+  }
+  absl::StrAppend(&str, " bids:[", absl::StrJoin(bids, ","), "]");
+  if (bidding_.ObligatoryCalledCard() != CalledCard::kNone) {
+    absl::StrAppend(
+        &str, " oblig:", CalledCardToString(bidding_.ObligatoryCalledCard()));
+  }
+
+  if (ann_ready) {
+    const Card called = announcements_.CalledCardTarokk();
+    if (called != kInvalidCard) {
+      absl::StrAppend(&str, " | called:", CardToString(called));
+    }
+    std::vector<std::string> sides;
+    for (Player q = 0; q < kNumPlayers; ++q) {
+      absl::optional<Side> sd = announcements_.PublicSide(q);
+      if (q == player &&
+          called != kInvalidCard) {  // observer knows its own side
+        sd = (q == declarer_ || q == announcements_.Partner())
+                 ? Side::kDeclarers
+                 : Side::kDefenders;
+      }
+      sides.push_back(!sd.has_value() ? "?"
+                                      : (*sd == Side::kDeclarers ? "D" : "d"));
+    }
+    absl::StrAppend(&str, " sides:[", absl::StrJoin(sides, ","), "]");
+    std::vector<std::string> anns;
+    for (int b = 0; b < kNumBonuses; ++b) {
+      for (int s = 0; s < 2; ++s) {
+        const Bonus bonus = static_cast<Bonus>(b);
+        const Side side = static_cast<Side>(s);
+        if (!announcements_.BonusAnnounced(bonus, side)) continue;
+        const int k = announcements_.BonusKontraLevel(bonus, side);
+        anns.push_back(absl::StrCat(BonusToString(bonus), s == 0 ? "(D" : "(d",
+                                    k ? absl::StrCat("+k", k) : "", ")"));
+      }
+    }
+    if (!anns.empty()) {
+      absl::StrAppend(&str, " ann:[", absl::StrJoin(anns, ","), "]");
+    }
+    if (announcements_.GameKontraLevel() > 0) {
+      absl::StrAppend(&str, " gk:", announcements_.GameKontraLevel());
+    }
+    if (announcements_.HivatalbolKontraPlayer() != kInvalidPlayer) {
+      absl::StrAppend(&str, " hiv:P", announcements_.HivatalbolKontraPlayer());
+    }
+    std::vector<std::string> decl;
+    bool any_decl = false;
+    for (Player q = 0; q < kNumPlayers; ++q) {
+      const int d = announcements_.DeclaredTarokks(q);
+      decl.push_back(d ? absl::StrCat(d) : "-");
+      if (d) any_decl = true;
+    }
+    if (any_decl) {
+      absl::StrAppend(&str, " tarokks:[", absl::StrJoin(decl, ","), "]");
+    }
+  }
+
+  // §6.3 discarded-tarokk counts and §6.4 the declarer's face-up skart tarokks.
+  const std::vector<std::vector<Card>>& discards = CurrentDiscards();
+  bool any_discard = false;
+  std::vector<std::string> counts;
+  for (Player q = 0; q < kNumPlayers; ++q) {
+    int n = 0;
+    for (Card c : discards[q]) {
+      if (IsTarokk(c)) ++n;
+    }
+    counts.push_back(absl::StrCat(n));
+    if (!discards[q].empty()) any_discard = true;
+  }
+  if (any_discard) {
+    absl::StrAppend(&str, " | disc:[", absl::StrJoin(counts, ","), "]");
+  }
+  const bool skart_shown =
+      declarer_ != kInvalidPlayer &&
+      (phase_ == Phase::kAnnouncements ||
+       (phase_ == Phase::kPlaying && completed_tricks_.empty() &&
+        trick_cards_.empty()));
+  if (skart_shown) {
+    std::vector<Card> st;
+    for (Card c : discards[declarer_]) {
+      if (IsTarokk(c)) st.push_back(c);
+    }
+    if (!st.empty()) absl::StrAppend(&str, " shown:", CardsToString(st));
+  }
+
+  // Play: the trick that completed while the player was skipped, then the one
+  // in progress now.
+  if (!completed_tricks_.empty()) {
+    absl::StrAppend(&str, " | last:", CardsToString(completed_tricks_.back()),
+                    " won:P", trick_winners_.back());
+  }
+  if (!trick_cards_.empty()) {
+    absl::StrAppend(&str, " | trick(P", trick_leader_,
+                    "): ", CardsToString(trick_cards_));
+  }
+  absl::StrAppend(&str, " | points:[", absl::StrJoin(collected_points_, ","),
+                  "]");
+  if (IsTerminal()) {
+    absl::StrAppend(&str, " | returns:[", absl::StrJoin(Returns(), ","), "]");
+  }
   return str;
+}
+
+void HungarianTarokkState::ObservationTensor(Player player,
+                                             absl::Span<float> values) const {
+  SPIEL_CHECK_GE(player, 0);
+  SPIEL_CHECK_LT(player, kNumPlayers);
+  SPIEL_CHECK_EQ(static_cast<int>(values.size()), kObservationTensorSize);
+  std::fill(values.begin(), values.end(), 0.0f);
+  constexpr int kMaxKontra = 4;  // kontra .. hirskontra
+  constexpr int N = kNumPlayers;
+  // Players are encoded relative to the observer (0 = self); -1 marks "none".
+  auto rel = [&](Player q) { return q < 0 ? -1 : (q - player + N) % N; };
+
+  int pos = 0;
+  auto onehot = [&](int idx, int size) {
+    if (idx >= 0 && idx < size) values[pos + idx] = 1.0f;
+    pos += size;
+  };
+  auto player_none = [&](Player q) {  // player one-hot with a trailing "none"
+    const int r = rel(q);
+    onehot(r < 0 ? N : r, N + 1);
+  };
+  auto player_plain = [&](Player q) { onehot(rel(q), N); };  // all-zero if none
+  auto scalar = [&](float v) { values[pos++] = v; };
+  auto cards_multihot = [&](const std::vector<Card>& cards, bool tarokk_only) {
+    for (Card c : cards) {
+      if (tarokk_only && !IsTarokk(c)) continue;
+      if (c.index >= 0 && c.index < kNumCards) values[pos + c.index] = 1.0f;
+    }
+    pos += kNumCards;
+  };
+
+  const bool ann_ready =
+      (phase_ == Phase::kAnnouncements || phase_ == Phase::kPlaying ||
+       phase_ == Phase::kFinished) &&
+      declarer_ != kInvalidPlayer && !annulled_;
+
+  // Phase, whose turn it is, and the observer's own hand.
+  onehot(static_cast<int>(phase_), 6);
+  player_plain(CurrentPlayer());
+  cards_multihot(CurrentHands()[player], /*tarokk_only=*/false);
+
+  // Auction: declarer, the standing/winning bid, the obligatory call, and each
+  // player's highest bid (all persist so a skipped bidder sees them later).
+  player_none(declarer_);
+  absl::optional<Bid> shown_bid;
+  if (declarer_ != kInvalidPlayer) {
+    shown_bid = winning_bid_;
+  } else if (phase_ == Phase::kBidding) {
+    shown_bid = bidding_.StandingBid();
+  }
+  onehot(shown_bid.has_value() ? static_cast<int>(*shown_bid) : kNumBids,
+         kNumBids + 1);
+  onehot(static_cast<int>(bidding_.ObligatoryCalledCard()), 4);
+
+  // The auction as seven bid-slots -- 3, 2, hold@2, 1, hold@1, solo, hold@solo
+  // -- each holding the (relative) player who reached it, or "none". Replaying
+  // the bidding history reconstructs it, so a player skipped during the auction
+  // still sees the whole thing at its next turn. (3 has no hold-slot: a new
+  // bidder must raise, it cannot hold.)
+  constexpr int kNumBidSlots = 2 * kNumBids - 1;
+  std::array<int, kNumBidSlots> bid_players;
+  bid_players.fill(-1);  // -1 = nobody bid this slot
+  auto bid_slot = [&](Bid b) {
+    const int i = static_cast<int>(b);
+    return i > 0 ? i * 2 - 1 : 0;
+  };
+  Bid highest_bid = kWeakestBid;  // a hold can never precede the first bid
+  for (auto bid_it = BiddingHistoryBegin(); bid_it != BiddingHistoryEnd();
+       ++bid_it) {
+    if (bid_it->action == kActionPass) continue;  // dropped out, not a slot
+    int slot;
+    if (bid_it->action == kActionHold) {
+      slot = bid_slot(highest_bid) + 1;
+    } else {
+      highest_bid = ActionToBid(bid_it->action);
+      slot = bid_slot(highest_bid);
+    }
+    bid_players[slot] = rel(bid_it->player);
+  }
+  for (int slot = 0; slot < kNumBidSlots; ++slot) {
+    scalar(bid_players[slot] < 0
+               ? 0.0f
+               : static_cast<float>(bid_players[slot] + 1));
+  }
+
+  // Announcements (all guarded: the sub-state's arrays are only valid once its
+  // phase is reached). Called tarokk, sides, tarokk counts, hivatalból kontra.
+  const Card called =
+      ann_ready ? announcements_.CalledCardTarokk() : kInvalidCard;
+  const Player partner = ann_ready ? announcements_.Partner() : kInvalidPlayer;
+  onehot(called == kInvalidCard ? kNumTarokks : called.index, kNumTarokks + 1);
+  for (int r = 0; r < N; ++r) {
+    const Player q = (player + r) % N;
+    int side = 2;  // unknown
+    if (declarer_ != kInvalidPlayer && q == declarer_) side = 0;
+    if (ann_ready) {
+      absl::optional<Side> sd = announcements_.PublicSide(q);
+      if (sd.has_value()) side = static_cast<int>(*sd);
+      if (q == player && called != kInvalidCard) {
+        side = (q == declarer_ || q == partner) ? 0 : 1;
+      }
+    }
+    onehot(side, 3);
+  }
+  for (int r = 0; r < N; ++r) {
+    const int d =
+        ann_ready ? announcements_.DeclaredTarokks((player + r) % N) : 0;
+    onehot(d == 9 ? 2 : (d == 8 ? 1 : 0), 3);
+  }
+  player_none(ann_ready ? announcements_.HivatalbolKontraPlayer()
+                        : kInvalidPlayer);
+
+  // Bonus announcements, their kontra levels, and the game kontra.
+  for (int b = 0; b < kNumBonuses; ++b) {
+    for (int s = 0; s < 2; ++s) {
+      scalar(ann_ready && announcements_.BonusAnnounced(static_cast<Bonus>(b),
+                                                        static_cast<Side>(s))
+                 ? 1.0f
+                 : 0.0f);
+    }
+  }
+  for (int b = 0; b < kNumBonuses; ++b) {
+    for (int s = 0; s < 2; ++s) {
+      const int k = ann_ready ? announcements_.BonusKontraLevel(
+                                    static_cast<Bonus>(b), static_cast<Side>(s))
+                              : 0;
+      scalar(static_cast<float>(k) / kMaxKontra);
+    }
+  }
+  scalar(ann_ready ? static_cast<float>(announcements_.GameKontraLevel()) /
+                         kMaxKontra
+                   : 0.0f);
+
+  // §6.3 discarded-tarokk counts, §6.4 the declarer's shown skart, the points.
+  const std::vector<std::vector<Card>>& discards = CurrentDiscards();
+  for (int r = 0; r < N; ++r) {
+    int n = 0;
+    for (Card c : discards[(player + r) % N]) {
+      if (IsTarokk(c)) ++n;
+    }
+    scalar(static_cast<float>(n) / kTalonSize);
+  }
+  const bool skart_shown =
+      declarer_ != kInvalidPlayer &&
+      (phase_ == Phase::kAnnouncements ||
+       (phase_ == Phase::kPlaying && completed_tricks_.empty()));
+  if (skart_shown) {
+    cards_multihot(discards[declarer_], /*tarokk_only=*/true);
+  } else {
+    pos += kNumCards;
+  }
+
+  auto add_trick = [&](const std::vector<Card>& trick, Player leader) {
+    std::array<Card, kNumPlayers> trick_cards;
+    trick_cards.fill(kInvalidCard);
+    for (int i = 0; i < static_cast<int>(trick.size()); ++i) {
+      trick_cards[(leader + i) % N] = trick[i];
+    }
+    for (int r = 0; r < N; ++r) {
+      const Card c = trick_cards[(player + r) % N];
+      onehot(c == kInvalidCard ? kNumCards : c.index, kNumCards + 1);
+    }
+  };
+
+  // Play: the current trick (which card each player played), its leader, then
+  // the most-recently completed trick's cards and its winner.
+  add_trick(trick_cards_, trick_leader_);
+  player_plain(trick_cards_.empty() ? kInvalidPlayer : trick_leader_);
+  if (!completed_tricks_.empty()) {
+    Player last_leader;
+    if (trick_winners_.size() > 1) last_leader = trick_winners_[trick_winners_.size() - 2];
+    else last_leader = 0;  // the forehand led the first trick
+    add_trick(completed_tricks_.back(), last_leader);
+  } else {
+    pos += (kNumCards + 1) * kNumPlayers;
+  }
+
+  SPIEL_CHECK_EQ(pos, kObservationTensorSize);
 }
 
 std::unique_ptr<State> HungarianTarokkState::Clone() const {

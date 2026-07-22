@@ -94,6 +94,16 @@ class BiddingState {
   // is no obligation. Decided from the bidding-time hand, so a high honour
   // later drawn from the talon does not lift it.
   bool PagatUltiObligation() const { return pagat_ulti_obligation_; }
+  // The strongest bid standing in the auction (nullopt before anyone has bid).
+  absl::optional<Bid> StandingBid() const { return current_bid_; }
+  // The highest bid player p has made, or nullopt if it has not bid (also for
+  // an out-of-range / not-yet-started auction, so it is safe on a default
+  // state).
+  absl::optional<Bid> PlayerBid(Player p) const {
+    if (p < 0 || p >= static_cast<int>(player_bid_.size()))
+      return absl::nullopt;
+    return player_bid_[p];
+  }
 
   std::string ToString() const;
 

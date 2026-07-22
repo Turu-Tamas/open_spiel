@@ -23,8 +23,8 @@ inline constexpr double kMaxDealScore = 20000.0;
 // static_cast<int>(Side) (kDeclarers = 0, kDefenders = 1).
 struct DealScore {
   Player declarer = kInvalidPlayer;
-  // The declarer's partner, or kInvalidPlayer if the declarer plays alone (§7.4:
-  // a lone declarer settles with each opponent, so scores ×3).
+  // The declarer's partner, or kInvalidPlayer if the declarer plays alone
+  // (§7.4: a lone declarer settles with each opponent, so scores ×3).
   Player partner = kInvalidPlayer;
   int base_value = 1;  // base game value by bid: three = 1 .. solo = 4
 
@@ -46,8 +46,8 @@ struct DealScore {
   bool xxi_caught = false;
   Side xxi_catcher_side = Side::kDeclarers;
 
-  // Announcements: whether each side announced each bonus and the kontra level of
-  // that (bonus, side) claim; the game's own kontra level; and each player's
+  // Announcements: whether each side announced each bonus and the kontra level
+  // of that (bonus, side) claim; the game's own kontra level; and each player's
   // tarokk-count declaration (0, 8 or 9).
   std::array<std::array<bool, 2>, kNumBonuses> announced{};
   std::array<std::array<int, 2>, kNumBonuses> bonus_kontra{};

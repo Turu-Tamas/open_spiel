@@ -40,6 +40,28 @@ enum class Phase {
   kFinished
 };
 
+// The flat observation tensor length. The observation is a fixed-size,
+// cumulative snapshot of what a player may see (rules.md §5.5, §6.3-§6.4).
+// Because every public fact it holds is monotonic -- bids only rise,
+// announcements only accumulate, discards and points only grow -- plus the one
+// most-recent completed trick, a single snapshot always conveys everything that
+// happened since the player's previous turn. In particular the whole auction
+// (each player's highest bid and its outcome) persists into every later block,
+// so a player skipped during the bidding still sees the complete result here.
+// Players are encoded relative to the observer (self = 0); the trailing slot of
+// a player one-hot marked (+1) is "none". The blocks, in order:
+//   phase(6) current-player(4) own-hand(42) declarer(5) bid(5) obligatory(4)
+//   bidders(7) called-tarokk(23) sides(4x3) tarokk-declarations(4x3)
+//   hivatalbol(5) bonus-announced(6x2) bonus-kontra(6x2) game-kontra(1)
+//   discarded-tarokk-counts(4) declarer-shown-tarokks(42)
+//   current-trick(4x43) current-trick-leader(4) last-trick(4x43)
+inline constexpr int kObservationTensorSize =
+    6 + kNumPlayers + kNumCards + (kNumPlayers + 1) + (kNumBids + 1) + 4 +
+    (2 * kNumBids - 1) + (kNumTarokks + 1) + kNumPlayers * 3 +
+    kNumPlayers * 3 + (kNumPlayers + 1) + kNumBonuses * 2 + kNumBonuses * 2 +
+    1 + kNumPlayers + kNumCards + kNumPlayers * (kNumCards + 1) +
+    kNumPlayers + kNumPlayers * (kNumCards + 1);
+
 class HungarianTarokkState : public State {
  public:
   explicit HungarianTarokkState(std::shared_ptr<const Game> game);
@@ -53,6 +75,8 @@ class HungarianTarokkState : public State {
   std::vector<double> Returns() const override;
   std::string InformationStateString(Player player) const override;
   std::string ObservationString(Player player) const override;
+  void ObservationTensor(Player player,
+                         absl::Span<float> values) const override;
   std::unique_ptr<State> Clone() const override;
   ActionsAndProbs ChanceOutcomes() const override;
 
@@ -91,6 +115,15 @@ class HungarianTarokkState : public State {
   const std::vector<std::vector<Card>>& CurrentDiscards() const;
   const std::vector<Card>& CurrentTalon() const;
 
+  std::vector<PlayerAction>::const_iterator BiddingHistoryBegin() const {
+    return bidding_history_start_ ? history_.cbegin() + *bidding_history_start_
+                                  : history_.cend();
+  }
+  std::vector<PlayerAction>::const_iterator BiddingHistoryEnd() const {
+    return bidding_history_end_ ? history_.cbegin() + *bidding_history_end_
+                                : history_.cend();
+  }
+
   Phase phase_ = Phase::kDealing;
   Player current_player_ = kChancePlayerId;
   int cards_dealt_ = 0;
@@ -98,6 +131,10 @@ class HungarianTarokkState : public State {
   std::vector<std::vector<Card>> players_cards_;  // hands (outside the talon)
   std::vector<Card> talon_;                       // talon (outside the talon)
   BiddingState bidding_;
+  std::optional<int>
+      bidding_history_start_;  // index of the first bidding action in history_
+  std::optional<int>
+      bidding_history_end_;  // index of the last bidding action in history_
   Player declarer_ = kInvalidPlayer;
   Bid winning_bid_ = Bid::kThree;
   TalonExchangeState talon_exchange_;
@@ -123,6 +160,9 @@ class HungarianTarokkGame : public Game {
   }
   int MaxChanceOutcomes() const override { return kNumCards; }
   int NumPlayers() const override { return kNumPlayers; }
+  std::vector<int> ObservationTensorShape() const override {
+    return {kObservationTensorSize};
+  }
   double MinUtility() const override { return -kMaxDealScore; }
   double MaxUtility() const override { return kMaxDealScore; }
   absl::optional<double> UtilitySum() const override { return 0.0; }
