@@ -699,8 +699,8 @@ void HungarianTarokkState::ObservationTensor(Player player,
     bid_players[slot] = rel(bid_it->player);
   }
   for (int slot = 0; slot < kNumBidSlots; ++slot) {
-    scalar(bid_players[slot] < 0 ? 0.0f
-                                 : static_cast<float>(bid_players[slot] + 1));
+    scalar(bid_players[slot] < 0 ? -1.0f
+                                 : static_cast<float>(bid_players[slot]));
   }
 
   // Announcements (all guarded: the sub-state's arrays are only valid once its
@@ -784,7 +784,8 @@ void HungarianTarokkState::ObservationTensor(Player player,
   // Play: the current trick (which card each player played), its leader, then
   // the most-recently completed trick's cards and its winner.
   add_trick(trick_cards_, trick_leader_);
-  player_plain(trick_cards_.empty() ? kInvalidPlayer : trick_leader_);
+  SPIEL_CHECK_GE(trick_leader_, 0);
+  player_plain(trick_leader_);
   if (!completed_tricks_.empty()) {
     Player last_leader;
     if (trick_winners_.size() > 1)
@@ -847,10 +848,10 @@ std::unique_ptr<ObservationStruct> HungarianTarokkState::ToObservationStruct(
     }
   }
 
-  // Announcements (defaults until that phase is reached). The called tarokk, the
-  // publicly-known sides (with the observer's own side revealed if it holds the
-  // called card), the tarokk-count declarations, the hivatalból kontra, then the
-  // bonus announcements with their kontra levels and the game kontra.
+  // Announcements (defaults until that phase is reached). The called tarokk,
+  // the publicly-known sides (with the observer's own side revealed if it holds
+  // the called card), the tarokk-count declarations, the hivatalból kontra,
+  // then the bonus announcements with their kontra levels and the game kontra.
   const Card called =
       ann_ready ? announcements_.CalledCardTarokk() : kInvalidCard;
   const Player partner = ann_ready ? announcements_.Partner() : kInvalidPlayer;
