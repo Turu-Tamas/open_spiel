@@ -813,24 +813,23 @@ std::unique_ptr<ObservationStruct> HungarianTarokkState::ToObservationStruct(
        phase_ == Phase::kFinished) &&
       declarer_ != kInvalidPlayer && !annulled_;
   const auto seat = [](Player p) { return p < 0 ? -1 : static_cast<int>(p); };
-  const auto side_name = [](Side s) {
-    return s == Side::kDeclarers ? "declarers" : "defenders";
-  };
 
   // Phase, whose turn it is, and the observer's own hand.
-  obs->phase = PhaseToString(phase_);
+  obs->phase = static_cast<int>(phase_);
   obs->current_player = seat(CurrentPlayer());
-  for (Card c : CurrentHands()[player]) obs->hand.push_back(CardToString(c));
+  for (Card c : CurrentHands()[player]) obs->hand.push_back(c.index);
 
   // Auction: declarer, the winning (or standing) bid, the obligatory call, then
   // the seven bid-slots replayed from the history (see ObservationTensor).
   obs->declarer = seat(declarer_);
   if (declarer_ != kInvalidPlayer) {
-    obs->bid = BidToString(winning_bid_);
+    obs->bid = static_cast<int>(winning_bid_);
   } else if (phase_ == Phase::kBidding && bidding_.StandingBid().has_value()) {
-    obs->bid = BidToString(*bidding_.StandingBid());
+    obs->bid = static_cast<int>(*bidding_.StandingBid());
+  } else {
+    obs->bid = -1;
   }
-  obs->obligatory_call = CalledCardToString(bidding_.ObligatoryCalledCard());
+  obs->obligatory_call = static_cast<int>(bidding_.ObligatoryCalledCard());
   constexpr int kNumBidSlots = 2 * kNumBids - 1;
   obs->bid_slots.assign(kNumBidSlots, -1);
   auto bid_slot = [](Bid b) {
@@ -855,18 +854,22 @@ std::unique_ptr<ObservationStruct> HungarianTarokkState::ToObservationStruct(
   const Card called =
       ann_ready ? announcements_.CalledCardTarokk() : kInvalidCard;
   const Player partner = ann_ready ? announcements_.Partner() : kInvalidPlayer;
-  if (called != kInvalidCard) obs->called_tarokk = CardToString(called);
+  obs->called_tarokk = called == kInvalidCard ? -1 : called.index;
   for (Player q = 0; q < N; ++q) {
-    std::string s = "unknown";
-    if (declarer_ != kInvalidPlayer && q == declarer_) s = "declarers";
+    int side = -1;  // unknown
+    if (declarer_ != kInvalidPlayer && q == declarer_) {
+      side = static_cast<int>(Side::kDeclarers);
+    }
     if (ann_ready) {
       absl::optional<Side> sd = announcements_.PublicSide(q);
-      if (sd.has_value()) s = side_name(*sd);
+      if (sd.has_value()) side = static_cast<int>(*sd);
       if (q == player && called != kInvalidCard) {
-        s = (q == declarer_ || q == partner) ? "declarers" : "defenders";
+        side = static_cast<int>((q == declarer_ || q == partner)
+                                    ? Side::kDeclarers
+                                    : Side::kDefenders);
       }
     }
-    obs->sides.push_back(s);
+    obs->sides.push_back(side);
   }
   for (Player q = 0; q < N; ++q) {
     obs->declared_tarokks.push_back(
@@ -881,8 +884,7 @@ std::unique_ptr<ObservationStruct> HungarianTarokkState::ToObservationStruct(
         const Side side = static_cast<Side>(s);
         if (!announcements_.BonusAnnounced(bonus, side)) continue;
         obs->bonus_announcements.push_back(HungarianTarokkBonusAnnouncement{
-            BonusToString(bonus), side_name(side),
-            announcements_.BonusKontraLevel(bonus, side)});
+            b, s, announcements_.BonusKontraLevel(bonus, side)});
       }
     }
   }
@@ -903,26 +905,26 @@ std::unique_ptr<ObservationStruct> HungarianTarokkState::ToObservationStruct(
        (phase_ == Phase::kPlaying && completed_tricks_.empty()));
   if (skart_shown) {
     for (Card c : discards[declarer_]) {
-      if (IsTarokk(c)) obs->declarer_shown_tarokks.push_back(CardToString(c));
+      if (IsTarokk(c)) obs->declarer_shown_tarokks.push_back(c.index);
     }
   }
 
   // Trick play: each player's card (by absolute seat) in the trick in progress
   // and in the last completed one; the last trick's winner is the current
   // trick's leader, so it is not repeated -- exactly as the tensor.
-  obs->current_trick.assign(N, std::nullopt);
+  obs->current_trick.assign(N, -1);
   for (int i = 0; i < static_cast<int>(trick_cards_.size()); ++i) {
-    obs->current_trick[(trick_leader_ + i) % N] = CardToString(trick_cards_[i]);
+    obs->current_trick[(trick_leader_ + i) % N] = trick_cards_[i].index;
   }
   obs->current_trick_leader = trick_cards_.empty() ? -1 : seat(trick_leader_);
-  obs->last_trick.assign(N, std::nullopt);
+  obs->last_trick.assign(N, -1);
   if (!completed_tricks_.empty()) {
     const Player last_leader = trick_winners_.size() > 1
                                    ? trick_winners_[trick_winners_.size() - 2]
                                    : 0;
     const std::vector<Card>& t = completed_tricks_.back();
     for (int i = 0; i < static_cast<int>(t.size()); ++i) {
-      obs->last_trick[(last_leader + i) % N] = CardToString(t[i]);
+      obs->last_trick[(last_leader + i) % N] = t[i].index;
     }
   }
   return obs;
