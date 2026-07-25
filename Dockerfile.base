@@ -49,11 +49,12 @@ WORKDIR /repo
 RUN pip --no-cache-dir install matplotlib
 
 # install
-COPY . .
+COPY install.sh .
 RUN ./install.sh
 RUN pip install --no-cache-dir --upgrade -r requirements.txt 
 
 # build and test
+COPY . .
 RUN mkdir -p build
 WORKDIR /repo/build
 RUN cmake -DPython3_EXECUTABLE=`which python` -DCMAKE_CXX_COMPILER=`which clang++` ../open_spiel
