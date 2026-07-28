@@ -26,6 +26,7 @@
 #include "open_spiel/games/hungarian_tarokk/bidding.h"
 #include "open_spiel/games/hungarian_tarokk/cards.h"
 #include "open_spiel/games/hungarian_tarokk/hungarian_tarokk.h"
+#include "open_spiel/games/hungarian_tarokk/talon.h"
 #include "open_spiel/python/pybind11/pybind11.h"
 #include "open_spiel/spiel.h"
 
@@ -51,6 +52,18 @@ using open_spiel::hungarian_tarokk::HungarianTarokkState;
 using open_spiel::hungarian_tarokk::IsTarokk;
 using open_spiel::hungarian_tarokk::Phase;
 using open_spiel::hungarian_tarokk::Side;
+
+namespace {
+
+// Pure tag types, used only so the action-id constants/methods below (mirror-
+// ing the disjoint per-phase ranges owned by bidding.h, talon.h and
+// announcements.h) can be namespaced under a simple python class per phase,
+// instead of dumped flat into the module.
+struct BiddingActions {};
+struct TalonActions {};
+struct AnnouncementActions {};
+
+}  // namespace
 
 void open_spiel::init_pyspiel_games_hungarian_tarokk(py::module& m) {
   py::module_ ht = m.def_submodule("hungarian_tarokk");
@@ -102,6 +115,115 @@ void open_spiel::init_pyspiel_games_hungarian_tarokk(py::module& m) {
       .def("__eq__", [](const Card& a, const Card& b) { return a == b; },
            py::is_operator())
       .def("__hash__", [](const Card& c) { return std::hash<int>()(c.index); });
+
+  // ---- Action ids -----------------------------------------------------------
+  // A card action is simply the card's 0..41 index (Card.index above; tarokks
+  // are 0..21). The auction, talon exchange and announcement phases each own a
+  // disjoint range of action ids above that (see the respective headers'
+  // comments); the constants/methods below expose those ranges to python
+  // without needing to parse or produce string representations.
+  ht.attr("NUM_DISTINCT_ACTIONS") =
+      open_spiel::hungarian_tarokk::kNumDistinctActions;
+  ht.attr("NUM_CARDS") = open_spiel::hungarian_tarokk::kNumCards;
+  ht.attr("NUM_TAROKKS") = open_spiel::hungarian_tarokk::kNumTarokks;
+
+  py::class_<BiddingActions> bidding_actions(ht, "BiddingActions");
+  bidding_actions.attr("ACTION_BASE") =
+      open_spiel::hungarian_tarokk::kBiddingActionBase;
+  bidding_actions.attr("NUM_ACTIONS") =
+      open_spiel::hungarian_tarokk::kNumBiddingActions;
+  bidding_actions.attr("PASS") = open_spiel::hungarian_tarokk::kActionPass;
+  bidding_actions.attr("BID_THREE") =
+      open_spiel::hungarian_tarokk::kActionBidThree;
+  bidding_actions.attr("BID_TWO") =
+      open_spiel::hungarian_tarokk::kActionBidTwo;
+  bidding_actions.attr("BID_ONE") =
+      open_spiel::hungarian_tarokk::kActionBidOne;
+  bidding_actions.attr("BID_SOLO") =
+      open_spiel::hungarian_tarokk::kActionBidSolo;
+  bidding_actions.attr("HOLD") = open_spiel::hungarian_tarokk::kActionHold;
+  bidding_actions
+      .def_static("bid_to_action", &open_spiel::hungarian_tarokk::BidToAction,
+                  py::arg("bid"))
+      .def_static("action_to_bid", &open_spiel::hungarian_tarokk::ActionToBid,
+                  py::arg("action"))
+      .def_static("is_bid_action", &open_spiel::hungarian_tarokk::IsBidAction,
+                  py::arg("action"))
+      .def_static("is_bidding_action",
+                  &open_spiel::hungarian_tarokk::IsBiddingAction,
+                  py::arg("action"));
+
+  py::class_<TalonActions> talon_actions(ht, "TalonActions");
+  talon_actions.attr("DISCARD_ACTION_BASE") =
+      open_spiel::hungarian_tarokk::kDiscardActionBase;
+  talon_actions.attr("ANNUL") = open_spiel::hungarian_tarokk::kActionAnnul;
+  talon_actions.attr("DECLINE_ANNUL") =
+      open_spiel::hungarian_tarokk::kActionDeclineAnnul;
+  talon_actions
+      .def_static("discard_action_for_card",
+                  &open_spiel::hungarian_tarokk::DiscardActionForCard,
+                  py::arg("card"))
+      .def_static("card_for_discard_action",
+                  &open_spiel::hungarian_tarokk::CardForDiscardAction,
+                  py::arg("action"))
+      .def_static("is_discard_action",
+                  &open_spiel::hungarian_tarokk::IsDiscardAction,
+                  py::arg("action"));
+
+  py::class_<AnnouncementActions> announcement_actions(ht,
+                                                        "AnnouncementActions");
+  announcement_actions.attr("CALL_ACTION_BASE") =
+      open_spiel::hungarian_tarokk::kCallActionBase;
+  announcement_actions.attr("ANNOUNCE_BONUS_BASE") =
+      open_spiel::hungarian_tarokk::kAnnounceBonusBase;
+  announcement_actions.attr("KONTRA_ACTION_BASE") =
+      open_spiel::hungarian_tarokk::kKontraActionBase;
+  announcement_actions.attr("GAME_KONTRA_ITEM") =
+      open_spiel::hungarian_tarokk::kGameKontraItem;
+  announcement_actions.attr("NUM_KONTRA_ITEMS") =
+      open_spiel::hungarian_tarokk::kNumKontraItems;
+  announcement_actions.attr("DECLARE_EIGHT") =
+      open_spiel::hungarian_tarokk::kActionDeclareEight;
+  announcement_actions.attr("DECLARE_NINE") =
+      open_spiel::hungarian_tarokk::kActionDeclareNine;
+  announcement_actions.attr("PASS") =
+      open_spiel::hungarian_tarokk::kActionAnnouncePass;
+  announcement_actions.attr("LAST_ACTION") =
+      open_spiel::hungarian_tarokk::kLastAnnounceAction;
+  announcement_actions
+      .def_static("call_action_for_tarokk",
+                  &open_spiel::hungarian_tarokk::CallActionForTarokk,
+                  py::arg("tarokk"))
+      .def_static("tarokk_for_call_action",
+                  &open_spiel::hungarian_tarokk::TarokkForCallAction,
+                  py::arg("action"))
+      .def_static("announce_bonus_action",
+                  &open_spiel::hungarian_tarokk::AnnounceBonusAction,
+                  py::arg("bonus"))
+      .def_static("kontra_claim_action",
+                  &open_spiel::hungarian_tarokk::KontraClaimAction,
+                  py::arg("bonus"), py::arg("side"))
+      .def_static("kontra_item_for_bonus",
+                  &open_spiel::hungarian_tarokk::KontraItemForBonus,
+                  py::arg("bonus"), py::arg("side"))
+      .def_static("bonus_for_kontra_item",
+                  &open_spiel::hungarian_tarokk::BonusForKontraItem,
+                  py::arg("item"))
+      .def_static("side_for_kontra_item",
+                  &open_spiel::hungarian_tarokk::SideForKontraItem,
+                  py::arg("item"))
+      .def_static("is_call_action",
+                  &open_spiel::hungarian_tarokk::IsCallAction,
+                  py::arg("action"))
+      .def_static("is_announce_bonus_action",
+                  &open_spiel::hungarian_tarokk::IsAnnounceBonusAction,
+                  py::arg("action"))
+      .def_static("is_kontra_action",
+                  &open_spiel::hungarian_tarokk::IsKontraAction,
+                  py::arg("action"))
+      .def_static("is_tarokk_declare_action",
+                  &open_spiel::hungarian_tarokk::IsTarokkDeclareAction,
+                  py::arg("action"));
 
   // ---- Bidding sub-state --------------------------------------------------
   py::class_<BiddingState>(ht, "HungarianTarokkBiddingState")
