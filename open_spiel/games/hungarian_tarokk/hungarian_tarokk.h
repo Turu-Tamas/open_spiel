@@ -25,8 +25,8 @@ inline constexpr int kMaxBiddingDecisions = 16;
 inline constexpr int kMaxAnnouncementDecisions = 200;
 
 // Action ids live in bidding.h (42..47), talon.h (48..91) and announcements.h
-// (92..135); the total action count runs up to the last of them.
-inline constexpr int kNumDistinctActions = kLastAnnounceAction + 1;  // 136
+// (92..150); the total action count runs up to the last of them.
+inline constexpr int kNumDistinctActions = kLastAnnounceAction + 1;  // 151
 
 // The phases the parent state orchestrates. The auction, the talon exchange and
 // the announcements are each a single phase delegated to their own

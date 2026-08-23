@@ -1,6 +1,7 @@
 #include "open_spiel/games/hungarian_tarokk/announcements.h"
 
 #include <algorithm>
+#include <array>
 #include <string>
 #include <utility>
 #include <vector>
@@ -43,13 +44,14 @@ std::string AnnouncementActionToString(Action action) {
         BonusToString(static_cast<Bonus>(action - kAnnounceBonusBase)));
   }
   if (IsKontraAction(action)) {
-    int item = action - kKontraActionBase;
-    if (item == kGameKontraItem) return "Kontra Game";
-    Bonus bonus = static_cast<Bonus>((item - 1) / 2);
-    Side side = static_cast<Side>((item - 1) % 2);
-    return absl::StrCat(
-        "Kontra ", BonusToString(bonus),
-        side == Side::kDeclarers ? " (declarers')" : " (defenders')");
+    static constexpr std::array<const char*, kNumKontraLevels> kVerbs = {
+        "Kontra", "Rekontra", "Szubkontra", "Hirskontra"};
+    const int idx = action - kKontraActionBase;
+    const int group = idx / kNumKontraLevels;
+    const char* verb = kVerbs[idx % kNumKontraLevels];
+    if (group == 0) return absl::StrCat(verb, " Game");
+    return absl::StrCat(verb, " ",
+                        BonusToString(static_cast<Bonus>(group - 1)));
   }
   if (action == kActionDeclareEight) return "Declare8Tarokks";
   if (action == kActionDeclareNine) return "Declare9Tarokks";
@@ -211,6 +213,45 @@ absl::optional<Side> AnnouncementState::KontraRaiserSide(int item) const {
   return (level % 2 == 0) ? Opponent(owner) : owner;
 }
 
+absl::optional<int> AnnouncementState::KontraTargetItem(int group, int level,
+                                                         Player p) const {
+  if (group == 0) {
+    // The game has a single owner (declarers), so it's never ambiguous.
+    if (kontra_level_[kGameKontraItem] != level) return absl::nullopt;
+    if (KontraRaiserSide(kGameKontraItem) != SideOf(p)) return absl::nullopt;
+    return kGameKontraItem;
+  }
+  const int bonus = group - 1;
+  const int declarers_item =
+      KontraItemForBonus(static_cast<Bonus>(bonus), Side::kDeclarers);
+  const int defenders_item =
+      KontraItemForBonus(static_cast<Bonus>(bonus), Side::kDefenders);
+  const bool declarers_qualifies = bonus_announced_[bonus][0] &&
+                                   kontra_level_[declarers_item] == level;
+  const bool defenders_qualifies = bonus_announced_[bonus][1] &&
+                                   kontra_level_[defenders_item] == level;
+  if (declarers_qualifies != defenders_qualifies) {
+    // Only one side's claim is at this level: unambiguous by elimination
+    // (this is already deducible from the public bonus/kontra state alone,
+    // so it needs no side-deduction check beyond genuine entitlement).
+    const int item = declarers_qualifies ? declarers_item : defenders_item;
+    if (KontraRaiserSide(item) != SideOf(p)) return absl::nullopt;
+    return item;
+  }
+  if (!declarers_qualifies) return absl::nullopt;  // neither qualifies
+  // Both sides' claims are at this level (both independently announced the
+  // bonus, §5.2, and each was raised in turn): which one a bare kontra/
+  // rekontra hits is only deducible from p's own side, since kontra/
+  // szubkontra (even levels) reveal p as the claim owner's opponent and
+  // rekontra/hirskontra (odd levels) reveal p as the owner. Exactly like a
+  // side-carrying announcement (§5.5), p may only make it once that's safe:
+  // its side is already public, or the convention default already matches
+  // it -- otherwise it must first reveal itself unambiguously some other way.
+  if (!CanAnnounceForOwnSide(p)) return absl::nullopt;
+  const Side owner = (level % 2 == 0) ? Opponent(SideOf(p)) : SideOf(p);
+  return KontraItemForBonus(static_cast<Bonus>(bonus), owner);
+}
+
 bool AnnouncementState::HasPendingObligation(Player p) const {
   // The cue-bidder whose only honour is the pagát must announce pagátultimó
   // (C §5.2.2): until its side has, the player may not end its turn.
@@ -297,12 +338,17 @@ std::vector<Action> AnnouncementState::LegalActions() const {
     if (b == static_cast<int>(Bonus::kTrull) && !TrullPromiseMet(p)) continue;
     legal.push_back(AnnounceBonusAction(static_cast<Bonus>(b)));
   }
-  for (int i = 0; i < kNumKontraItems; ++i) {
-    // No side-deduction requirements for kontras, because you have
-    // to be against the side that announced the bonus.
-    if (kontra_level_[i] < kMaxKontra && KontraRaiserSide(i) == SideOf(p)) {
-      legal.push_back(
-          KontraClaimAction(BonusForKontraItem(i), SideForKontraItem(i)));
+  // A kontra action names no side (§5.3): whether one is offered, and which
+  // claim it hits, is resolved by KontraTargetItem -- unambiguously by
+  // elimination when only one claim is at the right level, else (both are)
+  // subject to the same §5.5 side-deduction gate as an announcement.
+  for (int group = 0; group < kNumKontraGroups; ++group) {
+    for (int level = 0; level < kNumKontraLevels; ++level) {
+      if (!KontraTargetItem(group, level, p).has_value()) continue;
+      legal.push_back(group == 0
+                           ? KontraGameAction(level)
+                           : KontraBonusAction(
+                                 static_cast<Bonus>(group - 1), level));
     }
   }
   // A player holding 8/9 tarokks may declare their tarokk count (also side-
@@ -389,7 +435,10 @@ void AnnouncementState::ApplyAction(Action action) {
   }
 
   if (IsKontraAction(action)) {
-    const int item = action - kKontraActionBase;
+    const int idx = action - kKontraActionBase;
+    const int group = idx / kNumKontraLevels;
+    const int level = idx % kNumKontraLevels;
+    const int item = *KontraTargetItem(group, level, p);  // legal -> resolves
     kontra_level_[item] += 1;
     if (item != kGameKontraItem &&
         BonusForKontraItem(item) == Bonus::kPagatUlti) {

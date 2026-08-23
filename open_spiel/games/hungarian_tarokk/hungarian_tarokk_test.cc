@@ -510,10 +510,15 @@ void AnnouncementLogicTest() {
   }
 
   // Both sides may announce the same bonus, each with its own kontra chain
-  // (§5.2, §5.3). The declarer (side 0) announces four kings; a defender
-  // (side 1) must first reveal its side with a kontra before it may announce
-  // its own four kings (§5.5); the partner (side 0) may then rekontra its own
-  // and kontra the defenders'.
+  // (§5.2, §5.3). A kontra action never names a side (§5.3, "kontra four
+  // kings", not "kontra the declarers' four kings"), but it does name its
+  // level (kontra/rekontra/szub-/hirskontra are distinct calls), and that
+  // level plus the kontra-ing player's own side always pins down exactly one
+  // claim -- kontra (an even level) is always the claim owner's opponent
+  // raising a fresh or twice-raised claim, rekontra (odd) is always the owner
+  // raising back, so there is never any ambiguity between them. The declarer
+  // (side 0) announces four kings; a defender (side 1) must first reveal its
+  // side with a kontra before it may announce its own four kings (§5.5).
   {
     AnnouncementState a(hands(2), 0, Bid::kThree, CalledCard::kNone);
     a.ApplyAction(CallActionForTarokk(kCardXX));  // P0 calls (partner P2)
@@ -522,16 +527,18 @@ void AnnouncementLogicTest() {
     a.ApplyAction(kActionAnnouncePass);           // P0 ends its turn
     SPIEL_CHECK_EQ(a.CurrentPlayer(), 1);         // a defender (side 1)
     std::vector<Action> legal = a.LegalActions();
-    // The defender may kontra the declarers' four kings and the game, but not
-    // yet announce its own four kings (its side is not public, and the
-    // convention would attribute the announcement to the declarer's side).
-    SPIEL_CHECK_TRUE(Contains(
-        legal, KontraClaimAction(Bonus::kFourKings, Side::kDeclarers)));
-    SPIEL_CHECK_TRUE(Contains(legal, kKontraActionBase + kGameKontraItem));
+    // The defender may kontra the (sole) four kings claim and the game -- but
+    // not rekontra it (nothing has kontra'd it yet) -- and not yet announce
+    // its own four kings (its side is not public, and the convention would
+    // attribute the announcement to the declarer's side).
+    SPIEL_CHECK_TRUE(Contains(legal, KontraBonusAction(Bonus::kFourKings, 0)));
+    SPIEL_CHECK_FALSE(
+        Contains(legal, KontraBonusAction(Bonus::kFourKings, 1)));
+    SPIEL_CHECK_TRUE(Contains(legal, kActionKontraGame));
     SPIEL_CHECK_FALSE(Contains(legal, AnnounceBonusAction(Bonus::kFourKings)));
     // Kontra-ing reveals P1 as a defender; now it may announce its own bonus.
-    a.ApplyAction(
-        KontraClaimAction(Bonus::kFourKings, Side::kDeclarers));  // kontra P0's
+    a.ApplyAction(KontraBonusAction(Bonus::kFourKings, 0));  // kontra P0's
+    SPIEL_CHECK_EQ(a.BonusKontraLevel(Bonus::kFourKings, Side::kDeclarers), 1);
     SPIEL_CHECK_TRUE(a.PublicSide(1) == Side::kDefenders);
     SPIEL_CHECK_TRUE(
         Contains(a.LegalActions(), AnnounceBonusAction(Bonus::kFourKings)));
@@ -540,18 +547,76 @@ void AnnouncementLogicTest() {
     a.ApplyAction(kActionAnnouncePass);
     SPIEL_CHECK_EQ(a.CurrentPlayer(), 2);  // declarer's partner (side 0)
     std::vector<Action> legal2 = a.LegalActions();
-    // The declarers' four kings (now level 1) is theirs to rekontra; the
-    // defenders' (level 0) is theirs to kontra -- two distinct, unambiguous
-    // actions.
-    SPIEL_CHECK_TRUE(Contains(
-        legal2, KontraClaimAction(Bonus::kFourKings, Side::kDeclarers)));
-    SPIEL_CHECK_TRUE(Contains(
-        legal2, KontraClaimAction(Bonus::kFourKings, Side::kDefenders)));
-    // Rekontra-ing reveals P2 as the partner; P3 is then a defender by
-    // elimination (§5.5).
-    a.ApplyAction(KontraClaimAction(Bonus::kFourKings, Side::kDeclarers));
+    // Both claims are now raisable by P2 (declarers), as two unambiguous,
+    // distinct actions: a fresh kontra of the defenders' (level 0), and a
+    // rekontra of its own side's, already once kontra'd (level 1).
+    SPIEL_CHECK_TRUE(Contains(legal2, KontraBonusAction(Bonus::kFourKings, 0)));
+    SPIEL_CHECK_TRUE(Contains(legal2, KontraBonusAction(Bonus::kFourKings, 1)));
+    // Rekontra-ing its own side's claim reveals P2 as the partner; P3 is then
+    // a defender by elimination (§5.5).
+    a.ApplyAction(KontraBonusAction(Bonus::kFourKings, 1));
+    SPIEL_CHECK_EQ(a.BonusKontraLevel(Bonus::kFourKings, Side::kDeclarers), 2);
+    SPIEL_CHECK_EQ(a.BonusKontraLevel(Bonus::kFourKings, Side::kDefenders), 0);
     SPIEL_CHECK_TRUE(a.PublicSide(2) == Side::kDeclarers);
     SPIEL_CHECK_TRUE(a.PublicSide(3) == Side::kDefenders);
+  }
+
+  // When both sides' claims reach the SAME level at once, which one a bare
+  // rekontra hits is no longer deducible by elimination -- it depends on the
+  // (still unrevealed) caller's own side, so it is gated exactly like a
+  // side-carrying announcement (§5.5): legal only if the caller's side is
+  // already public or matches the convention default, and never
+  // misattributed to the wrong side even when it is.
+  auto reach_double_level_one = [&](Player xx_holder) {
+    AnnouncementState a(hands(xx_holder), 0, Bid::kThree, CalledCard::kNone);
+    a.ApplyAction(CallActionForTarokk(kCardXX));         // P0 calls
+    a.ApplyAction(AnnounceBonusAction(Bonus::kFourKings));  // P0: declarers'
+    a.ApplyAction(kActionAnnouncePass);
+    a.ApplyAction(KontraBonusAction(Bonus::kFourKings, 0));  // P1 kontras it,
+    // revealing P1 as a defender -- now free to announce its own.
+    a.ApplyAction(AnnounceBonusAction(Bonus::kFourKings));  // P1: defenders'
+    a.ApplyAction(kActionAnnouncePass);
+    a.ApplyAction(kActionAnnouncePass);  // P2 has nothing to safely say yet
+    a.ApplyAction(kActionAnnouncePass);  // P3 likewise
+    // Back to P0 (still the only publicly-known side): only the defenders'
+    // claim is fresh (level 0), so this kontra is unambiguous by
+    // elimination -- it does not yet need the §5.5 gate.
+    a.ApplyAction(KontraBonusAction(Bonus::kFourKings, 0));
+    a.ApplyAction(kActionAnnouncePass);
+    a.ApplyAction(kActionAnnouncePass);  // P1 has nothing new to say either
+    // Both claims are now at level 1; the last (and only) revealed speaker
+    // was P0, a declarer, so the convention default is declarers.
+    SPIEL_CHECK_EQ(a.BonusKontraLevel(Bonus::kFourKings, Side::kDeclarers), 1);
+    SPIEL_CHECK_EQ(a.BonusKontraLevel(Bonus::kFourKings, Side::kDefenders), 1);
+    SPIEL_CHECK_EQ(a.CurrentPlayer(), 2);
+    return a;
+  };
+  {
+    // P2 holds the XX, so it is truly the (still unrevealed) partner -- its
+    // true side (declarers) matches the convention default, so its rekontra
+    // is allowed, and it correctly raises the declarers' claim (its own).
+    AnnouncementState a = reach_double_level_one(/*xx_holder=*/2);
+    SPIEL_CHECK_TRUE(Contains(a.LegalActions(), KontraBonusAction(Bonus::kFourKings, 1)));
+    a.ApplyAction(KontraBonusAction(Bonus::kFourKings, 1));
+    SPIEL_CHECK_EQ(a.BonusKontraLevel(Bonus::kFourKings, Side::kDeclarers), 2);
+    SPIEL_CHECK_EQ(a.BonusKontraLevel(Bonus::kFourKings, Side::kDefenders), 1);
+    SPIEL_CHECK_TRUE(a.PublicSide(2) == Side::kDeclarers);  // revealed
+  }
+  {
+    // P3 (not P2) holds the XX here, so P2 is truly a defender -- its true
+    // side contradicts the convention default (declarers), so P2 may not
+    // rekontra at all yet (neither claim -- it cannot pass itself off as
+    // declarers, and rekontra-ing its own claim would just as surely reveal
+    // a side the table isn't assuming). Once P2 passes, P3 -- truly the
+    // declarers' partner, matching convention -- may.
+    AnnouncementState a = reach_double_level_one(/*xx_holder=*/3);
+    SPIEL_CHECK_FALSE(Contains(a.LegalActions(), KontraBonusAction(Bonus::kFourKings, 1)));
+    a.ApplyAction(kActionAnnouncePass);  // P2 has nothing safe to say
+    SPIEL_CHECK_EQ(a.CurrentPlayer(), 3);
+    SPIEL_CHECK_TRUE(Contains(a.LegalActions(), KontraBonusAction(Bonus::kFourKings, 1)));
+    a.ApplyAction(KontraBonusAction(Bonus::kFourKings, 1));
+    SPIEL_CHECK_EQ(a.BonusKontraLevel(Bonus::kFourKings, Side::kDeclarers), 2);
+    SPIEL_CHECK_TRUE(a.PublicSide(3) == Side::kDeclarers);
   }
 }
 
@@ -600,7 +665,7 @@ void MandatoryAnnouncementTest() {
         AnnounceBonusAction(Bonus::kPagatUlti));  // declarer announces
     a.ApplyAction(kActionAnnouncePass);
     SPIEL_CHECK_EQ(a.CurrentPlayer(), 1);  // the defender
-    a.ApplyAction(KontraClaimAction(Bonus::kPagatUlti, Side::kDeclarers));
+    a.ApplyAction(KontraBonusAction(Bonus::kPagatUlti, 0));
     std::vector<Action> legal = a.LegalActions();
     SPIEL_CHECK_TRUE(
         Contains(legal, kActionDeclareEight));  // must declare eight
@@ -653,8 +718,7 @@ void PublicSideDeductionTest() {
     SPIEL_CHECK_FALSE(a.PublicSide(2).has_value());
     SPIEL_CHECK_FALSE(a.PublicSide(3).has_value());
     a.ApplyAction(kActionAnnouncePass);  // P0 passes after calling
-    a.ApplyAction(kKontraActionBase +
-                  kGameKontraItem);      // P1 kontras -> defender
+    a.ApplyAction(kActionKontraGame);  // P1 kontras -> defender
     a.ApplyAction(kActionAnnouncePass);  // P1 passes
     a.ApplyAction(kActionAnnouncePass);  // P2 (partner) passes
     a.ApplyAction(
@@ -676,8 +740,7 @@ void PublicSideDeductionTest() {
     a.ApplyAction(CallActionForTarokk(kCardXX));  // bare XX call
     SPIEL_CHECK_EQ(a.Partner(), 2);
     a.ApplyAction(kActionAnnouncePass);  // P0 passes
-    a.ApplyAction(kKontraActionBase +
-                  kGameKontraItem);      // P1 kontras -> defender
+    a.ApplyAction(kActionKontraGame);  // P1 kontras -> defender
     a.ApplyAction(kActionAnnouncePass);  // P1 passes
     a.ApplyAction(kActionAnnouncePass);  // P2 passes
     a.ApplyAction(
@@ -725,10 +788,10 @@ void DiscardedTarokkCallTest() {
     SPIEL_CHECK_TRUE(a.PublicSide(1) == Side::kDefenders);
     SPIEL_CHECK_TRUE(a.PublicSide(2) == Side::kDefenders);
     SPIEL_CHECK_TRUE(a.PublicSide(3) == Side::kDefenders);
-    // The game is already kontra'd by office, so the declarer's side may
-    // rekontra it (and no defender may kontra it again).
-    SPIEL_CHECK_TRUE(
-        Contains(a.LegalActions(), kKontraActionBase + kGameKontraItem));
+    // The game is already kontra'd by office (level 1), so the declarer's
+    // side may rekontra it -- a fresh kontra (level 0) is no longer on offer.
+    SPIEL_CHECK_TRUE(Contains(a.LegalActions(), kActionRekontraGame));
+    SPIEL_CHECK_FALSE(Contains(a.LegalActions(), kActionKontraGame));
   }
 
   // Calling a tarokk a defender holds in hand (not discarded) is an ordinary
@@ -876,7 +939,7 @@ void TrullPromiseTest() {
     // side until it reveals with a kontra.
     SPIEL_CHECK_FALSE(
         Contains(a.LegalActions(), AnnounceBonusAction(Bonus::kTrull)));
-    a.ApplyAction(kKontraActionBase + kGameKontraItem);  // reveal as a defender
+    a.ApplyAction(kActionKontraGame);  // reveal as a defender
     SPIEL_CHECK_TRUE(a.PublicSide(1) == Side::kDefenders);
     // Holding the XXI, it may now announce its trull.
     SPIEL_CHECK_TRUE(
@@ -893,7 +956,7 @@ void TrullPromiseTest() {
                         2);
     a.ApplyAction(CallActionForTarokk(kCardXX));
     a.ApplyAction(kActionAnnouncePass);
-    a.ApplyAction(kKontraActionBase + kGameKontraItem);  // reveal as a defender
+    a.ApplyAction(kActionKontraGame);  // reveal as a defender
     SPIEL_CHECK_TRUE(a.PublicSide(1) == Side::kDefenders);
     SPIEL_CHECK_FALSE(
         Contains(a.LegalActions(), AnnounceBonusAction(Bonus::kTrull)));
@@ -915,8 +978,7 @@ void TrullPromiseTest() {
     SPIEL_CHECK_FALSE(  // first round: only the Skíz -> refused
         Contains(a.LegalActions(), AnnounceBonusAction(Bonus::kTrull)));
     a.ApplyAction(kActionAnnouncePass);  // P0 ends its first turn
-    a.ApplyAction(kKontraActionBase +
-                  kGameKontraItem);        // P1 keeps the phase alive
+    a.ApplyAction(kActionKontraGame);  // P1 keeps the phase alive
     a.ApplyAction(kActionAnnouncePass);    // P1
     a.ApplyAction(kActionAnnouncePass);    // P2
     a.ApplyAction(kActionAnnouncePass);    // P3
