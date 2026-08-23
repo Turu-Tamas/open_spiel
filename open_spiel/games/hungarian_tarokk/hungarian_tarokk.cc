@@ -839,8 +839,7 @@ std::unique_ptr<ObservationStruct> HungarianTarokkState::ToObservationStruct(
   Bid highest_bid = kWeakestBid;  // a hold can never precede the first bid
   for (auto it = BiddingHistoryBegin(); it != BiddingHistoryEnd(); ++it) {
     obs->bidding_history.push_back(
-        HungarianTarokkBiddingCall{seat(it->player),
-                                   static_cast<int>(it->action)});
+        HungarianTarokkCall{seat(it->player), static_cast<int>(it->action)});
     if (it->action == kActionPass) continue;  // dropped out, not a slot
     if (it->action == kActionHold) {
       obs->bid_slots[bid_slot(highest_bid) + 1] = it->player;
@@ -892,6 +891,10 @@ std::unique_ptr<ObservationStruct> HungarianTarokkState::ToObservationStruct(
     }
   }
   obs->game_kontra = ann_ready ? announcements_.GameKontraLevel() : 0;
+  for (const std::pair<Player, Action>& call : announcements_.Log()) {
+    obs->announcement_history.push_back(
+        HungarianTarokkCall{seat(call.first), static_cast<int>(call.second)});
+  }
 
   // §6.3 discarded-tarokk counts and §6.4 the declarer's face-up skart tarokks.
   const std::vector<std::vector<Card>>& discards = CurrentDiscards();

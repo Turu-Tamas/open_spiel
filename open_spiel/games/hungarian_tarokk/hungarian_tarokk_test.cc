@@ -1242,6 +1242,14 @@ void ObservationTest() {
           const HungarianTarokkObservationStruct obs(json);
           SPIEL_CHECK_EQ(obs.observing_player, p);
           SPIEL_CHECK_EQ(obs.ToJson(), json);
+          // The observation's announcement_history replay is exactly the
+          // AnnouncementState's own public log (§5.3), for every observer.
+          SPIEL_CHECK_EQ(
+              obs.announcement_history.size(),
+              down_cast<HungarianTarokkState*>(state.get())
+                  ->Announcements()
+                  .Log()
+                  .size());
         }
       }
       if (state->IsTerminal()) break;

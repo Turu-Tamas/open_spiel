@@ -157,6 +157,11 @@ class AnnouncementState {
   int GameKontraLevel() const { return kontra_level_[kGameKontraItem]; }
 
   std::string ToString() const;  // public log (does not reveal the partner)
+  // The public log itself, in order (every call and tarokk-count/pass
+  // action, but not the automatic hivatalból kontra -- see
+  // HivatalbolKontraPlayer()); for callers that want the raw actions rather
+  // than ToString()'s rendering.
+  const std::vector<std::pair<Player, Action>>& Log() const { return log_; }
 
  private:
   static constexpr int kMaxKontra = kNumKontraLevels;
