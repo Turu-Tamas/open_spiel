@@ -45,10 +45,12 @@ using open_spiel::hungarian_tarokk::Card;
 using open_spiel::hungarian_tarokk::CardPoints;
 using open_spiel::hungarian_tarokk::CardSuit;
 using open_spiel::hungarian_tarokk::CardToString;
+using open_spiel::hungarian_tarokk::HungarianTarokkBiddingCall;
 using open_spiel::hungarian_tarokk::HungarianTarokkBonusAnnouncement;
 using open_spiel::hungarian_tarokk::HungarianTarokkGame;
 using open_spiel::hungarian_tarokk::HungarianTarokkObservationStruct;
 using open_spiel::hungarian_tarokk::HungarianTarokkState;
+using open_spiel::hungarian_tarokk::HungarianTarokkTrick;
 using open_spiel::hungarian_tarokk::IsTarokk;
 using open_spiel::hungarian_tarokk::Phase;
 using open_spiel::hungarian_tarokk::Side;
@@ -182,6 +184,24 @@ void open_spiel::init_pyspiel_games_hungarian_tarokk(py::module& m) {
       open_spiel::hungarian_tarokk::kGameKontraItem;
   announcement_actions.attr("NUM_KONTRA_ITEMS") =
       open_spiel::hungarian_tarokk::kNumKontraItems;
+  // A kontra action names its level (kontra/rekontra/szub-/hirskontra are
+  // distinct calls, C §5.3) but never a side; NUM_KONTRA_GROUPS is the game
+  // plus one per bonus, NUM_KONTRA_LEVELS is those four levels, and their
+  // product is the total kontra action count.
+  announcement_actions.attr("NUM_KONTRA_GROUPS") =
+      open_spiel::hungarian_tarokk::kNumKontraGroups;
+  announcement_actions.attr("NUM_KONTRA_LEVELS") =
+      open_spiel::hungarian_tarokk::kNumKontraLevels;
+  announcement_actions.attr("NUM_KONTRA_ACTIONS") =
+      open_spiel::hungarian_tarokk::kNumKontraActions;
+  announcement_actions.attr("KONTRA_GAME") =
+      open_spiel::hungarian_tarokk::kActionKontraGame;
+  announcement_actions.attr("REKONTRA_GAME") =
+      open_spiel::hungarian_tarokk::kActionRekontraGame;
+  announcement_actions.attr("SZUBKONTRA_GAME") =
+      open_spiel::hungarian_tarokk::kActionSzubkontraGame;
+  announcement_actions.attr("HIRSKONTRA_GAME") =
+      open_spiel::hungarian_tarokk::kActionHirskontraGame;
   announcement_actions.attr("DECLARE_EIGHT") =
       open_spiel::hungarian_tarokk::kActionDeclareEight;
   announcement_actions.attr("DECLARE_NINE") =
@@ -200,9 +220,12 @@ void open_spiel::init_pyspiel_games_hungarian_tarokk(py::module& m) {
       .def_static("announce_bonus_action",
                   &open_spiel::hungarian_tarokk::AnnounceBonusAction,
                   py::arg("bonus"))
-      .def_static("kontra_claim_action",
-                  &open_spiel::hungarian_tarokk::KontraClaimAction,
-                  py::arg("bonus"), py::arg("side"))
+      .def_static("kontra_game_action",
+                  &open_spiel::hungarian_tarokk::KontraGameAction,
+                  py::arg("level"))
+      .def_static("kontra_bonus_action",
+                  &open_spiel::hungarian_tarokk::KontraBonusAction,
+                  py::arg("bonus"), py::arg("level"))
       .def_static("kontra_item_for_bonus",
                   &open_spiel::hungarian_tarokk::KontraItemForBonus,
                   py::arg("bonus"), py::arg("side"))
@@ -278,7 +301,7 @@ void open_spiel::init_pyspiel_games_hungarian_tarokk(py::module& m) {
       .def("__str__", &AnnouncementState::ToString)
       .def("to_string", &AnnouncementState::ToString);
 
-  // ---- Observation struct (+ nested bonus announcement) -------------------
+  // ---- Observation struct (+ nested record types) --------------------------
   py::class_<HungarianTarokkBonusAnnouncement>(
       ht, "HungarianTarokkBonusAnnouncement")
       .def(py::init<>())
@@ -286,6 +309,17 @@ void open_spiel::init_pyspiel_games_hungarian_tarokk(py::module& m) {
       .def_readwrite("side", &HungarianTarokkBonusAnnouncement::side)
       .def_readwrite("kontra_level",
                      &HungarianTarokkBonusAnnouncement::kontra_level);
+
+  py::class_<HungarianTarokkBiddingCall>(ht, "HungarianTarokkBiddingCall")
+      .def(py::init<>())
+      .def_readwrite("player", &HungarianTarokkBiddingCall::player)
+      .def_readwrite("action", &HungarianTarokkBiddingCall::action);
+
+  py::class_<HungarianTarokkTrick>(ht, "HungarianTarokkTrick")
+      .def(py::init<>())
+      .def_readwrite("leader", &HungarianTarokkTrick::leader)
+      .def_readwrite("cards", &HungarianTarokkTrick::cards)
+      .def_readwrite("winner", &HungarianTarokkTrick::winner);
 
   auto obs_struct_class =
       bind_spiel_struct<HungarianTarokkObservationStruct, ObservationStruct>(
@@ -300,6 +334,8 @@ void open_spiel::init_pyspiel_games_hungarian_tarokk(py::module& m) {
       .def_readwrite("obligatory_call",
                      &HungarianTarokkObservationStruct::obligatory_call)
       .def_readwrite("bid_slots", &HungarianTarokkObservationStruct::bid_slots)
+      .def_readwrite("bidding_history",
+                     &HungarianTarokkObservationStruct::bidding_history)
       .def_readwrite("called_tarokk",
                      &HungarianTarokkObservationStruct::called_tarokk)
       .def_readwrite("sides", &HungarianTarokkObservationStruct::sides)
@@ -321,6 +357,8 @@ void open_spiel::init_pyspiel_games_hungarian_tarokk(py::module& m) {
                      &HungarianTarokkObservationStruct::current_trick_leader)
       .def_readwrite("last_trick",
                      &HungarianTarokkObservationStruct::last_trick)
+      .def_readwrite("trick_history",
+                     &HungarianTarokkObservationStruct::trick_history)
       .def_readwrite("observing_player",
                      &HungarianTarokkObservationStruct::observing_player);
 

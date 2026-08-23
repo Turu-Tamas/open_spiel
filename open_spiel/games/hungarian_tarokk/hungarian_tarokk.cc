@@ -838,6 +838,9 @@ std::unique_ptr<ObservationStruct> HungarianTarokkState::ToObservationStruct(
   };
   Bid highest_bid = kWeakestBid;  // a hold can never precede the first bid
   for (auto it = BiddingHistoryBegin(); it != BiddingHistoryEnd(); ++it) {
+    obs->bidding_history.push_back(
+        HungarianTarokkBiddingCall{seat(it->player),
+                                   static_cast<int>(it->action)});
     if (it->action == kActionPass) continue;  // dropped out, not a slot
     if (it->action == kActionHold) {
       obs->bid_slots[bid_slot(highest_bid) + 1] = it->player;
@@ -926,6 +929,22 @@ std::unique_ptr<ObservationStruct> HungarianTarokkState::ToObservationStruct(
     for (int i = 0; i < static_cast<int>(t.size()); ++i) {
       obs->last_trick[(last_leader + i) % N] = t[i].index;
     }
+  }
+
+  // The full trick-by-trick replay: trick 0 is always led by the forehand
+  // (player 0), and each later trick is led by the previous one's winner.
+  Player leader = 0;
+  for (size_t t = 0; t < completed_tricks_.size(); ++t) {
+    const std::vector<Card>& cards = completed_tricks_[t];
+    HungarianTarokkTrick trick;
+    trick.leader = seat(leader);
+    trick.cards.assign(N, -1);
+    for (int i = 0; i < static_cast<int>(cards.size()); ++i) {
+      trick.cards[(leader + i) % N] = cards[i].index;
+    }
+    trick.winner = seat(trick_winners_[t]);
+    obs->trick_history.push_back(std::move(trick));
+    leader = trick_winners_[t];
   }
   return obs;
 }

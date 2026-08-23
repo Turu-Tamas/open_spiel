@@ -65,16 +65,21 @@ inline constexpr int kObservationTensorSize =
     kNumCards + kNumPlayers * (kNumCards + 1) + kNumPlayers +
     kNumPlayers * (kNumCards + 1);
 
-// A structured form of the observation. It carries exactly the facts
-// ObservationTensor encodes (see the layout comment above), as named fields of
-// machine-readable integer codes instead of a flat float vector. Cards are
+// A structured form of the observation. It carries every fact ObservationTensor
+// encodes (see the layout comment above) as named fields of machine-readable
+// integer codes instead of a flat float vector, PLUS two replay-only fields
+// the tensor deliberately omits to stay a fixed-size cumulative snapshot: the
+// full bidding_history and trick_history (see their comments below). Cards are
 // their 0..41 index (tarokks 0..21); players their absolute seat 0..3; phases,
 // bids, sides (0 = declarers, 1 = defenders), the obligatory call and bonuses
 // their respective enum values. A uniform -1 marks any absent / not-yet-known
 // value (no bid, no called card, unknown side, an empty trick slot, ...).
 // `observing_player` records whose observation this is. Only what the observer
 // may see is filled in: their own hand alone, the publicly-known sides, the
-// declarer's face-up skart, and so on -- matching the tensor.
+// declarer's face-up skart, and so on -- matching the tensor. The auction and
+// completed tricks are public to every seat (anyone at the table would have
+// heard every call and seen every card played), so bidding_history and
+// trick_history are the same for every observing_player.
 
 // One announced bonus (§5.2) together with its kontra chain (§5.3).
 struct HungarianTarokkBonusAnnouncement {
@@ -83,6 +88,25 @@ struct HungarianTarokkBonusAnnouncement {
   int kontra_level;  // 0 = announced (no kontra), 1 = kontra, 2 = rekontra, ...
   NLOHMANN_DEFINE_TYPE_INTRUSIVE(HungarianTarokkBonusAnnouncement, bonus, side,
                                  kontra_level);
+};
+
+// One action taken during the auction (bidding.h's kActionPass/kActionBid*/
+// kActionHold), in the order it was taken.
+struct HungarianTarokkBiddingCall {
+  int player;
+  int action;
+  NLOHMANN_DEFINE_TYPE_INTRUSIVE(HungarianTarokkBiddingCall, player, action);
+};
+
+// One completed trick (§6.3): who led it, each player's card by absolute seat
+// (every seat has played, so no -1s -- unlike current_trick/last_trick), and
+// who won it (which points aren't otherwise derivable without replaying the
+// play-beats-play comparison).
+struct HungarianTarokkTrick {
+  int leader;
+  std::vector<int> cards;  // per absolute seat: 0..41 index
+  int winner;
+  NLOHMANN_DEFINE_TYPE_INTRUSIVE(HungarianTarokkTrick, leader, cards, winner);
 };
 
 struct HungarianTarokkObservationContents {
@@ -98,6 +122,9 @@ struct HungarianTarokkObservationContents {
   // Which player (0..3, or -1) last reached each of the seven bid-slots, in
   // order: bid-3, bid-2, hold-2, bid-1, hold-1, bid-solo, hold-solo.
   std::vector<int> bid_slots;
+  // The auction's full call-by-call replay, in order (bid_slots collapses
+  // this to who last reached each slot; this keeps every pass too).
+  std::vector<HungarianTarokkBiddingCall> bidding_history;
 
   // Announcements (defaults until that phase is reached).
   int called_tarokk;                  // the called partner card (0..21), or -1
@@ -118,15 +145,20 @@ struct HungarianTarokkObservationContents {
   std::vector<int> current_trick;
   int current_trick_leader;
   std::vector<int> last_trick;
+  // Every trick completed so far, in play order (last_trick is always
+  // trick_history.back() once any trick is complete; this additionally keeps
+  // the ones before it).
+  std::vector<HungarianTarokkTrick> trick_history;
 
   NLOHMANN_DEFINE_TYPE_INTRUSIVE(HungarianTarokkObservationContents, phase,
                                  current_player, hand, declarer, bid,
-                                 obligatory_call, bid_slots, called_tarokk,
-                                 sides, declared_tarokks, hivatalbol_kontra,
-                                 bonus_announcements, game_kontra,
-                                 discard_tarokk_counts, declarer_shown_tarokks,
-                                 current_trick, current_trick_leader,
-                                 last_trick);
+                                 obligatory_call, bid_slots, bidding_history,
+                                 called_tarokk, sides, declared_tarokks,
+                                 hivatalbol_kontra, bonus_announcements,
+                                 game_kontra, discard_tarokk_counts,
+                                 declarer_shown_tarokks, current_trick,
+                                 current_trick_leader, last_trick,
+                                 trick_history);
 };
 
 struct HungarianTarokkObservationStruct : ObservationStruct,
