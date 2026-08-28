@@ -88,6 +88,7 @@ inline constexpr Action kActionDeclareEight =
 inline constexpr Action kActionDeclareNine = kActionDeclareEight + 1;
 inline constexpr Action kActionAnnouncePass = kActionDeclareNine + 1;
 inline constexpr Action kLastAnnounceAction = kActionAnnouncePass;
+inline constexpr int kNumAnnouncementActions = kLastAnnounceAction - kCallActionBase;
 
 inline bool IsCallAction(Action a) {
   return a >= kCallActionBase && a < kCallActionBase + kNumTarokks;

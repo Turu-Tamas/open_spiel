@@ -143,6 +143,8 @@ void open_spiel::init_pyspiel_games_hungarian_tarokk(py::module& m) {
       open_spiel::hungarian_tarokk::kActionBidOne;
   bidding_actions.attr("BID_SOLO") =
       open_spiel::hungarian_tarokk::kActionBidSolo;
+  bidding_actions.attr("NUM_ACTIONS") = 
+    open_spiel::hungarian_tarokk::kNumBiddingActions;
   bidding_actions.attr("HOLD") = open_spiel::hungarian_tarokk::kActionHold;
   bidding_actions
       .def_static("bid_to_action", &open_spiel::hungarian_tarokk::BidToAction,
@@ -210,6 +212,8 @@ void open_spiel::init_pyspiel_games_hungarian_tarokk(py::module& m) {
       open_spiel::hungarian_tarokk::kActionAnnouncePass;
   announcement_actions.attr("LAST_ACTION") =
       open_spiel::hungarian_tarokk::kLastAnnounceAction;
+  announcement_actions.attr("NUM_ACTIONS") =
+      open_spiel::hungarian_tarokk::kNumAnnouncementActions;
   announcement_actions
       .def_static("call_action_for_tarokk",
                   &open_spiel::hungarian_tarokk::CallActionForTarokk,
