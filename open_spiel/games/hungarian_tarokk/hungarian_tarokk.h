@@ -40,6 +40,46 @@ enum class Phase {
   kPlaying,
   kFinished
 };
+// The action ids a phase's actions are drawn from -- e.g. for building a
+// phase -> action-range mask without replaying a state. Unlike
+// State::LegalActions(), this takes no state and does not depend on whose
+// turn it is or what has happened so far; it is the full range each phase
+// can ever produce. Card ids (0..41) recur in kDealing, kTalonExchange (the
+// chance draw) and kPlaying since all three operate over the same 42 cards;
+// kFinished produces none.
+inline constexpr std::vector<Action> PhaseActions(Phase phase) {
+  std::vector<Action> actions;
+  switch (phase) {
+    case Phase::kDealing:
+    case Phase::kPlaying:
+      actions.reserve(kNumCards);
+      for (Action a = 0; a < kNumCards; ++a) actions.push_back(a);
+      break;
+    case Phase::kBidding:
+      actions.reserve(kNumBiddingActions);
+      for (Action a = kBiddingActionBase;
+           a < kBiddingActionBase + kNumBiddingActions; ++a) {
+        actions.push_back(a);
+      }
+      break;
+    case Phase::kTalonExchange:
+      actions.reserve(kNumCards + (kNumCards + 2));
+      for (Action a = 0; a < kNumCards; ++a) actions.push_back(a);
+      for (Action a = kDiscardActionBase; a <= kActionDeclineAnnul; ++a) {
+        actions.push_back(a);
+      }
+      break;
+    case Phase::kAnnouncements:
+      actions.reserve(kLastAnnounceAction - kCallActionBase + 1);
+      for (Action a = kCallActionBase; a <= kLastAnnounceAction; ++a) {
+        actions.push_back(a);
+      }
+      break;
+    case Phase::kFinished:
+      break;
+  }
+  return actions;
+}
 
 // The flat observation tensor length. The observation is a fixed-size,
 // cumulative snapshot of what a player may see (rules.md §5.5, §6.3-§6.4).

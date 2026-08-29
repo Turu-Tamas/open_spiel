@@ -78,6 +78,8 @@ void open_spiel::init_pyspiel_games_hungarian_tarokk(py::module& m) {
       .value("ANNOUNCEMENTS", Phase::kAnnouncements)
       .value("PLAYING", Phase::kPlaying)
       .value("FINISHED", Phase::kFinished);
+  ht.def("phase_actions", &open_spiel::hungarian_tarokk::PhaseActions,
+         py::arg("phase"));
 
   py::enum_<Bid>(ht, "HungarianTarokkBid")
       .value("THREE", Bid::kThree)
