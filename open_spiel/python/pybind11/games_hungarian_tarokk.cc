@@ -14,6 +14,7 @@
 
 #include "open_spiel/python/pybind11/games_hungarian_tarokk.h"
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -67,8 +68,13 @@ struct BiddingActions {};
 struct TalonActions {};
 struct AnnouncementActions {};
 
-py::array_t<int> VecToArray(const std::vector<int>& v) {
-  return py::array_t<int>(v.size(), v.empty() ? nullptr : v.data());
+// All of the observation's numeric data (card indices 0..41, action ids up to
+// kNumDistinctActions - 1, player seats 0..3, small counts, the -1 "absent"
+// marker) fits comfortably in an int8_t, so every numeric array below is
+// exposed to Python as one rather than the platform's (wider) default int.
+py::array_t<int8_t> VecToArray(const std::vector<int>& v) {
+  std::vector<int8_t> v8(v.begin(), v.end());
+  return py::array_t<int8_t>(v8.size(), v8.empty() ? nullptr : v8.data());
 }
 
 // As VecToArray, but the array always has exactly `length` entries: v is
@@ -77,11 +83,21 @@ py::array_t<int> VecToArray(const std::vector<int>& v) {
 // `length`. v must not be longer than `length`; callers pick `length` from a
 // known upper bound on v's size (e.g. kHandSize + max talon draw for a hand,
 // or kMaxBiddingDecisions for a call history) so this never truncates.
-py::array_t<int> PadVecToArray(const std::vector<int>& v, int length) {
+py::array_t<int8_t> PadVecToArray(const std::vector<int>& v, int length) {
   SPIEL_CHECK_LE(static_cast<int>(v.size()), length);
   std::vector<int> padded(v);
   padded.resize(length, -1);
   return VecToArray(padded);
+}
+
+// Converts a 0/1 legality mask (State::LegalActionsMask's return type) to a
+// numpy bool array.
+py::array_t<bool> MaskToArray(const std::vector<int>& mask) {
+  py::array_t<bool> arr(mask.size());
+  for (py::ssize_t i = 0; i < static_cast<py::ssize_t>(mask.size()); ++i) {
+    arr.mutable_at(i) = (mask[i] != 0);
+  }
+  return arr;
 }
 
 // If `v` is longer than `max_length`, drops its earliest entries and keeps
@@ -112,31 +128,51 @@ std::vector<HungarianTarokkCall> DropFirst(
 // regardless of how far the phase has progressed. `calls` must already be at
 // most `length` long -- callers that want to keep the latest entries instead
 // of failing on overflow (announcement_history, unlike bidding_history) do
-// so via KeepLatest before constructing this.
+// so via KeepLatest before constructing this. `action_offset` is subtracted
+// from every action before it is stored -- announcement_history uses this to
+// re-base its action ids to 0..kNumAnnouncementActions - 1 (they otherwise
+// start at kCallActionBase); bidding_history leaves it at 0 (raw action ids).
 struct HungarianTarokkCallArrays {
   HungarianTarokkCallArrays(const std::vector<HungarianTarokkCall>& calls,
-                            int length) {
+                            int length, int action_offset = 0) {
     SPIEL_CHECK_LE(static_cast<int>(calls.size()), length);
     std::vector<int> p, a;
     p.reserve(calls.size());
     a.reserve(calls.size());
     for (const HungarianTarokkCall& call : calls) {
       p.push_back(call.player);
-      a.push_back(call.action);
+      a.push_back(call.action - action_offset);
     }
     players = PadVecToArray(p, length);
     actions = PadVecToArray(a, length);
   }
-  py::array_t<int> players;
-  py::array_t<int> actions;
+  py::array_t<int8_t> players;
+  py::array_t<int8_t> actions;
 };
+
+// trick_history plus the trick currently in progress (if any) as its last
+// entry: leader = current_trick_leader, cards = current_trick (already
+// padded with -1 for seats that haven't played yet -- see ToObservation
+// Struct), winner = -1 (it isn't decided yet). Appended unconditionally, even
+// before any card of it has been played (in which case it's all -1s) or once
+// the deal is over (ditto) -- callers that only want completed tricks can
+// simply ignore trailing all -1 rows.
+std::vector<HungarianTarokkTrick> WithCurrentTrick(
+    const std::vector<HungarianTarokkTrick>& completed,
+    const std::vector<int>& current_trick_cards, int current_trick_leader) {
+  std::vector<HungarianTarokkTrick> all = completed;
+  all.push_back(
+      HungarianTarokkTrick{current_trick_leader, current_trick_cards,
+                          /*winner=*/-1});
+  return all;
+}
 
 // Struct-of-arrays decomposition of trick_history: leader and winner as one
 // array per trick, and cards as a single (length, kNumPlayers) 2D array
 // (every completed trick has exactly kNumPlayers cards, one per seat), padded
 // with -1 rows up to `length` tricks. When there are more than `length`
-// completed tricks, only the latest `length` are kept (KeepLatest) rather
-// than failing.
+// tricks (WithCurrentTrick above may add one beyond the completed ones),
+// only the latest `length` are kept (KeepLatest) rather than failing.
 struct HungarianTarokkTrickArrays {
   HungarianTarokkTrickArrays(const std::vector<HungarianTarokkTrick>& all,
                              int length) {
@@ -154,40 +190,46 @@ struct HungarianTarokkTrickArrays {
     leaders = PadVecToArray(l, length);
     winners = PadVecToArray(w, length);
     c.resize(length * N, -1);
-    cards = py::array_t<int>(
+    std::vector<int8_t> c8(c.begin(), c.end());
+    cards = py::array_t<int8_t>(
         {static_cast<py::ssize_t>(length), static_cast<py::ssize_t>(N)},
-        c.empty() ? nullptr : c.data());
+        c8.empty() ? nullptr : c8.data());
   }
-  py::array_t<int> leaders;
-  py::array_t<int> cards;  // shape (length, kNumPlayers)
-  py::array_t<int> winners;
+  py::array_t<int8_t> leaders;
+  py::array_t<int8_t> cards;  // shape (length, kNumPlayers)
+  py::array_t<int8_t> winners;
 };
 
 // Mirrors HungarianTarokkObservationStruct field-for-field (bonus_announce-
-// ments excepted -- see below), except every plain int vector is a numpy
-// array instead of a Python list, for callers that consume the observation as
-// tensors rather than as structured records. The already fixed-shape blocks
-// (bid_slots, sides, declared_tarokks, discard_tarokk_counts, last_trick) are
-// a plain VecToArray; hand and current_trick are additionally right-padded
-// (PadVecToArray) to a known-fixed length -- kMaxHandLength and kNumPlayers
-// respectively -- since hand shrinks as cards are played (and briefly grows
-// during the talon draw) while current_trick fills in over a trick.
-// bidding_history and announcement_history are decomposed into struct-of-
-// arrays form (HungarianTarokkCallArrays above) and padded to a
-// caller-supplied length, since unlike the tensor blocks their natural upper
-// bound depends on the phase rather than being a small constant; likewise
-// trick_history (HungarianTarokkTrickArrays). If bidding_history overflows
-// its length this fails loudly (SPIEL_CHECK_LE, via HungarianTarokkCall
-// Arrays); trick_history and announcement_history instead keep the latest
-// entries and drop the oldest ones (KeepLatest) -- see their fields below.
-// announcement_history additionally always drops its first entry (the
-// declarer's tarokk call), since that is already exposed as called_tarokk.
-// declarer_shown_tarokks is left unpadded (VecToArray): it has no single
-// fixed bound short of kNumTarokks. bonus_announcements is dropped entirely:
-// unlike every other field it is a sparse list of distinct enum-tagged
-// entries with no natural array form. This type exists only for the Python
-// binding; it is built from an existing HungarianTarokkObservationStruct
-// rather than duplicating HungarianTarokkState::ToObservationStruct's logic.
+// ments excepted -- see below), except every plain int vector is an int8
+// numpy array instead of a Python list (see VecToArray), for callers that
+// consume the observation as tensors rather than as structured records, plus
+// a legal_actions_mask field the struct has no analog for. The already
+// fixed-shape blocks (bid_slots, sides, declared_tarokks, discard_tarokk_
+// counts, last_trick) are a plain VecToArray; hand and current_trick are
+// additionally right-padded (PadVecToArray) to a known-fixed length --
+// kMaxHandLength and kNumPlayers respectively -- since hand shrinks as cards
+// are played (and briefly grows during the talon draw) while current_trick
+// fills in over a trick. bidding_history and announcement_history are
+// decomposed into struct-of-arrays form (HungarianTarokkCallArrays above)
+// and padded to a caller-supplied length, since unlike the tensor blocks
+// their natural upper bound depends on the phase rather than being a small
+// constant; likewise trick_history (HungarianTarokkTrickArrays), which is
+// additionally extended with the in-progress trick as its last entry (see
+// WithCurrentTrick). If bidding_history overflows its length this fails
+// loudly (SPIEL_CHECK_LE, via HungarianTarokkCallArrays); trick_history and
+// announcement_history instead keep the latest entries and drop the oldest
+// ones (KeepLatest) -- see their fields below. announcement_history
+// additionally always drops its first entry (the declarer's tarokk call,
+// already exposed as called_tarokk) and re-bases its remaining action ids to
+// start at 0 (see HungarianTarokkCallArrays' action_offset). declarer_shown_
+// tarokks is left unpadded (VecToArray): it has no single fixed bound short
+// of kNumTarokks. bonus_announcements is dropped entirely: unlike every
+// other field it is a sparse list of distinct enum-tagged entries with no
+// natural array form. This type exists only for the Python binding; it is
+// built from an existing HungarianTarokkObservationStruct (plus a legality
+// mask, since that isn't part of the struct) rather than duplicating
+// HungarianTarokkState::ToObservationStruct's logic.
 struct HungarianTarokkObservationArrays {
   // The largest a hand can ever be: kHandSize plus the most talon cards a
   // single draw can add (the weakest bid, "three", draws 3 -- see
@@ -196,6 +238,7 @@ struct HungarianTarokkObservationArrays {
       open_spiel::hungarian_tarokk::kHandSize + 3;
 
   HungarianTarokkObservationArrays(const HungarianTarokkObservationStruct& obs,
+                                   const std::vector<int>& legal_actions,
                                    int bidding_history_length,
                                    int announcement_history_length,
                                    int trick_history_length)
@@ -215,7 +258,8 @@ struct HungarianTarokkObservationArrays {
         announcement_history(
             KeepLatest(DropFirst(obs.announcement_history),
                       announcement_history_length),
-            announcement_history_length),
+            announcement_history_length,
+            /*action_offset=*/open_spiel::hungarian_tarokk::kCallActionBase),
         discard_tarokk_counts(VecToArray(obs.discard_tarokk_counts)),
         declarer_shown_tarokks(VecToArray(obs.declarer_shown_tarokks)),
         current_trick(
@@ -223,34 +267,43 @@ struct HungarianTarokkObservationArrays {
                           open_spiel::hungarian_tarokk::kNumPlayers)),
         current_trick_leader(obs.current_trick_leader),
         last_trick(VecToArray(obs.last_trick)),
-        trick_history(obs.trick_history, trick_history_length),
-        observing_player(obs.observing_player) {}
+        trick_history(
+            WithCurrentTrick(obs.trick_history, obs.current_trick,
+                             obs.current_trick_leader),
+            trick_history_length),
+        observing_player(obs.observing_player),
+        legal_actions_mask(MaskToArray(legal_actions)) {}
 
   int phase;
   int current_player;
-  py::array_t<int> hand;  // padded to kMaxHandLength
+  py::array_t<int8_t> hand;  // padded to kMaxHandLength
   int declarer;
   int bid;
   int obligatory_call;
-  py::array_t<int> bid_slots;
+  py::array_t<int8_t> bid_slots;
   HungarianTarokkCallArrays bidding_history;  // padded to bidding_history_length
   int called_tarokk;
-  py::array_t<int> sides;
-  py::array_t<int> declared_tarokks;
+  py::array_t<int8_t> sides;
+  py::array_t<int8_t> declared_tarokks;
   int hivatalbol_kontra;
   int game_kontra;
-  // First entry (the tarokk call) dropped; padded to announcement_history_
-  // length, keeping the latest entries if there are more than that.
+  // First entry (the tarokk call) dropped, remaining action ids re-based to
+  // start at 0; padded to announcement_history_length, keeping the latest
+  // entries if there are more than that.
   HungarianTarokkCallArrays announcement_history;
-  py::array_t<int> discard_tarokk_counts;
-  py::array_t<int> declarer_shown_tarokks;
-  py::array_t<int> current_trick;  // padded to kNumPlayers
+  py::array_t<int8_t> discard_tarokk_counts;
+  py::array_t<int8_t> declarer_shown_tarokks;
+  py::array_t<int8_t> current_trick;  // padded to kNumPlayers
   int current_trick_leader;
-  py::array_t<int> last_trick;
-  // Padded to trick_history_length, keeping the latest tricks if there are
-  // more than that.
+  py::array_t<int8_t> last_trick;
+  // The completed tricks plus the in-progress one as its last entry (see
+  // WithCurrentTrick), padded to trick_history_length and keeping the latest
+  // tricks if there are more than that.
   HungarianTarokkTrickArrays trick_history;
   int observing_player;
+  // True for each action index that is legal to play right now (from the
+  // observing player's point of view -- all false if it isn't their turn).
+  py::array_t<bool> legal_actions_mask;
 };
 
 }  // namespace
@@ -572,14 +625,15 @@ void open_spiel::init_pyspiel_games_hungarian_tarokk(py::module& m) {
 
   py::class_<HungarianTarokkObservationArrays>(
       ht, "HungarianTarokkObservationArrays")
-      .def(py::init<const HungarianTarokkObservationStruct&, int, int, int>(),
-           py::arg("observation"),
+      .def(py::init<const HungarianTarokkObservationStruct&,
+                    const std::vector<int>&, int, int, int>(),
+           py::arg("observation"), py::arg("legal_actions_mask"),
            py::arg("bidding_history_length") =
                open_spiel::hungarian_tarokk::kMaxBiddingDecisions,
            py::arg("announcement_history_length") =
                open_spiel::hungarian_tarokk::kMaxAnnouncementDecisions,
            py::arg("trick_history_length") =
-               open_spiel::hungarian_tarokk::kHandSize)
+               open_spiel::hungarian_tarokk::kNumTricks + 1)
       .def_readonly("phase", &HungarianTarokkObservationArrays::phase)
       .def_readonly("current_player",
                     &HungarianTarokkObservationArrays::current_player)
@@ -614,7 +668,9 @@ void open_spiel::init_pyspiel_games_hungarian_tarokk(py::module& m) {
       .def_readonly("trick_history",
                     &HungarianTarokkObservationArrays::trick_history)
       .def_readonly("observing_player",
-                    &HungarianTarokkObservationArrays::observing_player);
+                    &HungarianTarokkObservationArrays::observing_player)
+      .def_readonly("legal_actions_mask",
+                    &HungarianTarokkObservationArrays::legal_actions_mask);
 
   // ---- State --------------------------------------------------------------
   py::classh<HungarianTarokkState, State>(ht, "HungarianTarokkState")
@@ -636,8 +692,8 @@ void open_spiel::init_pyspiel_games_hungarian_tarokk(py::module& m) {
              return HungarianTarokkObservationArrays(
                  static_cast<const HungarianTarokkObservationStruct&>(
                      *state.ToObservationStruct(player)),
-                 bidding_history_length, announcement_history_length,
-                 trick_history_length);
+                 state.LegalActionsMask(player), bidding_history_length,
+                 announcement_history_length, trick_history_length);
            },
            py::arg("player"),
            py::arg("bidding_history_length") =
@@ -645,22 +701,22 @@ void open_spiel::init_pyspiel_games_hungarian_tarokk(py::module& m) {
            py::arg("announcement_history_length") =
                open_spiel::hungarian_tarokk::kMaxAnnouncementDecisions,
            py::arg("trick_history_length") =
-               open_spiel::hungarian_tarokk::kHandSize)
+               open_spiel::hungarian_tarokk::kNumTricks + 1)
       .def("to_observation_arrays",
            [](const HungarianTarokkState& state, int bidding_history_length,
               int announcement_history_length, int trick_history_length) {
              return HungarianTarokkObservationArrays(
                  static_cast<const HungarianTarokkObservationStruct&>(
                      *state.ToObservationStruct(state.CurrentPlayer())),
-                 bidding_history_length, announcement_history_length,
-                 trick_history_length);
+                 state.LegalActionsMask(), bidding_history_length,
+                 announcement_history_length, trick_history_length);
            },
            py::arg("bidding_history_length") =
                open_spiel::hungarian_tarokk::kMaxBiddingDecisions,
            py::arg("announcement_history_length") =
                open_spiel::hungarian_tarokk::kMaxAnnouncementDecisions,
            py::arg("trick_history_length") =
-               open_spiel::hungarian_tarokk::kHandSize)
+               open_spiel::hungarian_tarokk::kNumTricks + 1)
       // Pickle support
       .def(py::pickle(
           [](const HungarianTarokkState& state) {  // __getstate__
