@@ -18,7 +18,9 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
+#include <pybind11/numpy.h>
 #include <pybind11/stl.h>
 
 #include "open_spiel/json/include/nlohmann/json.hpp"  // IWYU pragma: keep
@@ -64,6 +66,143 @@ namespace {
 struct BiddingActions {};
 struct TalonActions {};
 struct AnnouncementActions {};
+
+py::array_t<int> VecToArray(const std::vector<int>& v) {
+  return py::array_t<int>(v.size(), v.empty() ? nullptr : v.data());
+}
+
+// Struct-of-arrays decomposition of a HungarianTarokkCall list
+// (bidding_history / announcement_history): the per-call player and action,
+// as two parallel arrays instead of a list of two-field records.
+struct HungarianTarokkCallArrays {
+  explicit HungarianTarokkCallArrays(
+      const std::vector<HungarianTarokkCall>& calls) {
+    std::vector<int> p, a;
+    p.reserve(calls.size());
+    a.reserve(calls.size());
+    for (const HungarianTarokkCall& call : calls) {
+      p.push_back(call.player);
+      a.push_back(call.action);
+    }
+    players = VecToArray(p);
+    actions = VecToArray(a);
+  }
+  py::array_t<int> players;
+  py::array_t<int> actions;
+};
+
+// Struct-of-arrays decomposition of trick_history: leader and winner as one
+// array per trick, and cards as a single (num_tricks, kNumPlayers) 2D array
+// (every completed trick has exactly kNumPlayers cards, one per seat).
+struct HungarianTarokkTrickArrays {
+  explicit HungarianTarokkTrickArrays(
+      const std::vector<HungarianTarokkTrick>& tricks) {
+    constexpr int N = open_spiel::hungarian_tarokk::kNumPlayers;
+    std::vector<int> l, w, c;
+    l.reserve(tricks.size());
+    w.reserve(tricks.size());
+    c.reserve(tricks.size() * N);
+    for (const HungarianTarokkTrick& trick : tricks) {
+      l.push_back(trick.leader);
+      w.push_back(trick.winner);
+      c.insert(c.end(), trick.cards.begin(), trick.cards.end());
+    }
+    leaders = VecToArray(l);
+    winners = VecToArray(w);
+    cards = py::array_t<int>(
+        {static_cast<py::ssize_t>(tricks.size()), static_cast<py::ssize_t>(N)},
+        c.empty() ? nullptr : c.data());
+  }
+  py::array_t<int> leaders;
+  py::array_t<int> cards;  // shape (num_tricks, kNumPlayers)
+  py::array_t<int> winners;
+};
+
+// Struct-of-arrays decomposition of bonus_announcements: bonus, side and
+// kontra_level as three parallel arrays instead of a list of three-field
+// records.
+struct HungarianTarokkBonusAnnouncementArrays {
+  explicit HungarianTarokkBonusAnnouncementArrays(
+      const std::vector<HungarianTarokkBonusAnnouncement>& announcements) {
+    std::vector<int> b, s, k;
+    b.reserve(announcements.size());
+    s.reserve(announcements.size());
+    k.reserve(announcements.size());
+    for (const HungarianTarokkBonusAnnouncement& a : announcements) {
+      b.push_back(a.bonus);
+      s.push_back(a.side);
+      k.push_back(a.kontra_level);
+    }
+    bonuses = VecToArray(b);
+    sides = VecToArray(s);
+    kontra_levels = VecToArray(k);
+  }
+  py::array_t<int> bonuses;
+  py::array_t<int> sides;
+  py::array_t<int> kontra_levels;
+};
+
+// Mirrors HungarianTarokkObservationStruct field-for-field, except every
+// plain int vector -- the fixed-shape blocks that ObservationTensor also
+// encodes, plus the observer's hand and the declarer's shown skart -- is a
+// numpy array instead of a Python list, for callers that consume the
+// observation as tensors rather than as structured records. bidding_history,
+// announcement_history, bonus_announcements and trick_history are likewise
+// decomposed into struct-of-arrays form (HungarianTarokkCallArrays /
+// HungarianTarokkBonusAnnouncementArrays / HungarianTarokkTrickArrays above)
+// rather than kept as lists of records, so no field here is ever a Python
+// list. This type exists only for the Python binding; it is built from an
+// existing HungarianTarokkObservationStruct rather than duplicating
+// HungarianTarokkState::ToObservationStruct's logic.
+struct HungarianTarokkObservationArrays {
+  explicit HungarianTarokkObservationArrays(
+      const HungarianTarokkObservationStruct& obs)
+      : phase(obs.phase),
+        current_player(obs.current_player),
+        hand(VecToArray(obs.hand)),
+        declarer(obs.declarer),
+        bid(obs.bid),
+        obligatory_call(obs.obligatory_call),
+        bid_slots(VecToArray(obs.bid_slots)),
+        bidding_history(obs.bidding_history),
+        called_tarokk(obs.called_tarokk),
+        sides(VecToArray(obs.sides)),
+        declared_tarokks(VecToArray(obs.declared_tarokks)),
+        hivatalbol_kontra(obs.hivatalbol_kontra),
+        bonus_announcements(obs.bonus_announcements),
+        game_kontra(obs.game_kontra),
+        announcement_history(obs.announcement_history),
+        discard_tarokk_counts(VecToArray(obs.discard_tarokk_counts)),
+        declarer_shown_tarokks(VecToArray(obs.declarer_shown_tarokks)),
+        current_trick(VecToArray(obs.current_trick)),
+        current_trick_leader(obs.current_trick_leader),
+        last_trick(VecToArray(obs.last_trick)),
+        trick_history(obs.trick_history),
+        observing_player(obs.observing_player) {}
+
+  int phase;
+  int current_player;
+  py::array_t<int> hand;
+  int declarer;
+  int bid;
+  int obligatory_call;
+  py::array_t<int> bid_slots;
+  HungarianTarokkCallArrays bidding_history;
+  int called_tarokk;
+  py::array_t<int> sides;
+  py::array_t<int> declared_tarokks;
+  int hivatalbol_kontra;
+  HungarianTarokkBonusAnnouncementArrays bonus_announcements;
+  int game_kontra;
+  HungarianTarokkCallArrays announcement_history;
+  py::array_t<int> discard_tarokk_counts;
+  py::array_t<int> declarer_shown_tarokks;
+  py::array_t<int> current_trick;
+  int current_trick_leader;
+  py::array_t<int> last_trick;
+  HungarianTarokkTrickArrays trick_history;
+  int observing_player;
+};
 
 }  // namespace
 
@@ -370,6 +509,67 @@ void open_spiel::init_pyspiel_games_hungarian_tarokk(py::module& m) {
       .def_readwrite("observing_player",
                      &HungarianTarokkObservationStruct::observing_player);
 
+  // Array-valued analog of HungarianTarokkObservationStruct above -- same
+  // data (see the class comment), but the plain int vectors come back as
+  // numpy arrays rather than Python lists.
+  py::class_<HungarianTarokkCallArrays>(ht, "HungarianTarokkCallArrays")
+      .def_readonly("players", &HungarianTarokkCallArrays::players)
+      .def_readonly("actions", &HungarianTarokkCallArrays::actions);
+
+  py::class_<HungarianTarokkTrickArrays>(ht, "HungarianTarokkTrickArrays")
+      .def_readonly("leaders", &HungarianTarokkTrickArrays::leaders)
+      .def_readonly("cards", &HungarianTarokkTrickArrays::cards)
+      .def_readonly("winners", &HungarianTarokkTrickArrays::winners);
+
+  py::class_<HungarianTarokkBonusAnnouncementArrays>(
+      ht, "HungarianTarokkBonusAnnouncementArrays")
+      .def_readonly("bonuses", &HungarianTarokkBonusAnnouncementArrays::bonuses)
+      .def_readonly("sides", &HungarianTarokkBonusAnnouncementArrays::sides)
+      .def_readonly("kontra_levels",
+                    &HungarianTarokkBonusAnnouncementArrays::kontra_levels);
+
+  py::class_<HungarianTarokkObservationArrays>(
+      ht, "HungarianTarokkObservationArrays")
+      .def(py::init<const HungarianTarokkObservationStruct&>(),
+           py::arg("observation"))
+      .def_readonly("phase", &HungarianTarokkObservationArrays::phase)
+      .def_readonly("current_player",
+                    &HungarianTarokkObservationArrays::current_player)
+      .def_readonly("hand", &HungarianTarokkObservationArrays::hand)
+      .def_readonly("declarer", &HungarianTarokkObservationArrays::declarer)
+      .def_readonly("bid", &HungarianTarokkObservationArrays::bid)
+      .def_readonly("obligatory_call",
+                    &HungarianTarokkObservationArrays::obligatory_call)
+      .def_readonly("bid_slots", &HungarianTarokkObservationArrays::bid_slots)
+      .def_readonly("bidding_history",
+                    &HungarianTarokkObservationArrays::bidding_history)
+      .def_readonly("called_tarokk",
+                    &HungarianTarokkObservationArrays::called_tarokk)
+      .def_readonly("sides", &HungarianTarokkObservationArrays::sides)
+      .def_readonly("declared_tarokks",
+                    &HungarianTarokkObservationArrays::declared_tarokks)
+      .def_readonly("hivatalbol_kontra",
+                    &HungarianTarokkObservationArrays::hivatalbol_kontra)
+      .def_readonly("bonus_announcements",
+                    &HungarianTarokkObservationArrays::bonus_announcements)
+      .def_readonly("game_kontra",
+                    &HungarianTarokkObservationArrays::game_kontra)
+      .def_readonly("announcement_history",
+                    &HungarianTarokkObservationArrays::announcement_history)
+      .def_readonly("discard_tarokk_counts",
+                    &HungarianTarokkObservationArrays::discard_tarokk_counts)
+      .def_readonly("declarer_shown_tarokks",
+                    &HungarianTarokkObservationArrays::declarer_shown_tarokks)
+      .def_readonly("current_trick",
+                    &HungarianTarokkObservationArrays::current_trick)
+      .def_readonly("current_trick_leader",
+                    &HungarianTarokkObservationArrays::current_trick_leader)
+      .def_readonly("last_trick", &HungarianTarokkObservationArrays::last_trick)
+      .def_readonly("trick_history",
+                    &HungarianTarokkObservationArrays::trick_history)
+      .def_readonly("observing_player",
+                    &HungarianTarokkObservationArrays::observing_player);
+
   // ---- State --------------------------------------------------------------
   py::classh<HungarianTarokkState, State>(ht, "HungarianTarokkState")
       .def("current_phase", &HungarianTarokkState::CurrentPhase)
@@ -383,6 +583,19 @@ void open_spiel::init_pyspiel_games_hungarian_tarokk(py::module& m) {
       .def("announcements", &HungarianTarokkState::Announcements,
            py::return_value_policy::reference_internal)
       .def("partner", &HungarianTarokkState::Partner)
+      .def("to_observation_arrays",
+           [](const HungarianTarokkState& state, Player player) {
+             return HungarianTarokkObservationArrays(
+                 static_cast<const HungarianTarokkObservationStruct&>(
+                     *state.ToObservationStruct(player)));
+           },
+           py::arg("player"))
+      .def("to_observation_arrays",
+           [](const HungarianTarokkState& state) {
+             return HungarianTarokkObservationArrays(
+                 static_cast<const HungarianTarokkObservationStruct&>(
+                     *state.ToObservationStruct(state.CurrentPlayer())));
+           })
       // Pickle support
       .def(py::pickle(
           [](const HungarianTarokkState& state) {  // __getstate__
