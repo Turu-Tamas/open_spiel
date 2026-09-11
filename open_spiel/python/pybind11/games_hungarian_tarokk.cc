@@ -214,9 +214,10 @@ struct HungarianTarokkTrickArrays {
 // decomposed into struct-of-arrays form (HungarianTarokkCallArrays above)
 // and padded to a caller-supplied length, since unlike the tensor blocks
 // their natural upper bound depends on the phase rather than being a small
-// constant; likewise trick_history (HungarianTarokkTrickArrays), which is
-// additionally extended with the in-progress trick as its last entry (see
-// WithCurrentTrick). If bidding_history overflows its length this fails
+// constant; likewise trick_history (HungarianTarokkTrickArrays), padded to
+// the fixed kNumTricks instead since its upper bound *is* a small constant --
+// it is additionally extended with the in-progress trick as its last entry
+// (see WithCurrentTrick). If bidding_history overflows its length this fails
 // loudly (SPIEL_CHECK_LE, via HungarianTarokkCallArrays); trick_history and
 // announcement_history instead keep the latest entries and drop the oldest
 // ones (KeepLatest) -- see their fields below. announcement_history
@@ -240,8 +241,7 @@ struct HungarianTarokkObservationArrays {
   HungarianTarokkObservationArrays(const HungarianTarokkObservationStruct& obs,
                                    const std::vector<int>& legal_actions,
                                    int bidding_history_length,
-                                   int announcement_history_length,
-                                   int trick_history_length)
+                                   int announcement_history_length)
       : phase(obs.phase),
         current_player(obs.current_player),
         hand(PadVecToArray(obs.hand, kMaxHandLength)),
@@ -270,7 +270,7 @@ struct HungarianTarokkObservationArrays {
         trick_history(
             WithCurrentTrick(obs.trick_history, obs.current_trick,
                              obs.current_trick_leader),
-            trick_history_length),
+            open_spiel::hungarian_tarokk::kNumTricks),
         observing_player(obs.observing_player),
         legal_actions_mask(MaskToArray(legal_actions)) {}
 
@@ -297,8 +297,8 @@ struct HungarianTarokkObservationArrays {
   int current_trick_leader;
   py::array_t<int8_t> last_trick;
   // The completed tricks plus the in-progress one as its last entry (see
-  // WithCurrentTrick), padded to trick_history_length and keeping the latest
-  // tricks if there are more than that.
+  // WithCurrentTrick), padded to kNumTricks and keeping the latest tricks if
+  // there are more than that.
   HungarianTarokkTrickArrays trick_history;
   int observing_player;
   // True for each action index that is legal to play right now (from the
@@ -626,14 +626,12 @@ void open_spiel::init_pyspiel_games_hungarian_tarokk(py::module& m) {
   py::class_<HungarianTarokkObservationArrays>(
       ht, "HungarianTarokkObservationArrays")
       .def(py::init<const HungarianTarokkObservationStruct&,
-                    const std::vector<int>&, int, int, int>(),
+                    const std::vector<int>&, int, int>(),
            py::arg("observation"), py::arg("legal_actions_mask"),
            py::arg("bidding_history_length") =
                open_spiel::hungarian_tarokk::kMaxBiddingDecisions,
            py::arg("announcement_history_length") =
-               open_spiel::hungarian_tarokk::kMaxAnnouncementDecisions,
-           py::arg("trick_history_length") =
-               open_spiel::hungarian_tarokk::kNumTricks + 1)
+               open_spiel::hungarian_tarokk::kMaxAnnouncementDecisions)
       .def_readonly("phase", &HungarianTarokkObservationArrays::phase)
       .def_readonly("current_player",
                     &HungarianTarokkObservationArrays::current_player)
@@ -687,36 +685,31 @@ void open_spiel::init_pyspiel_games_hungarian_tarokk(py::module& m) {
       .def("partner", &HungarianTarokkState::Partner)
       .def("to_observation_arrays",
            [](const HungarianTarokkState& state, Player player,
-              int bidding_history_length, int announcement_history_length,
-              int trick_history_length) {
+              int bidding_history_length, int announcement_history_length) {
              return HungarianTarokkObservationArrays(
                  static_cast<const HungarianTarokkObservationStruct&>(
                      *state.ToObservationStruct(player)),
                  state.LegalActionsMask(player), bidding_history_length,
-                 announcement_history_length, trick_history_length);
+                 announcement_history_length);
            },
            py::arg("player"),
            py::arg("bidding_history_length") =
                open_spiel::hungarian_tarokk::kMaxBiddingDecisions,
            py::arg("announcement_history_length") =
-               open_spiel::hungarian_tarokk::kMaxAnnouncementDecisions,
-           py::arg("trick_history_length") =
-               open_spiel::hungarian_tarokk::kNumTricks + 1)
+               open_spiel::hungarian_tarokk::kMaxAnnouncementDecisions)
       .def("to_observation_arrays",
            [](const HungarianTarokkState& state, int bidding_history_length,
-              int announcement_history_length, int trick_history_length) {
+              int announcement_history_length) {
              return HungarianTarokkObservationArrays(
                  static_cast<const HungarianTarokkObservationStruct&>(
                      *state.ToObservationStruct(state.CurrentPlayer())),
                  state.LegalActionsMask(), bidding_history_length,
-                 announcement_history_length, trick_history_length);
+                 announcement_history_length);
            },
            py::arg("bidding_history_length") =
                open_spiel::hungarian_tarokk::kMaxBiddingDecisions,
            py::arg("announcement_history_length") =
-               open_spiel::hungarian_tarokk::kMaxAnnouncementDecisions,
-           py::arg("trick_history_length") =
-               open_spiel::hungarian_tarokk::kNumTricks + 1)
+               open_spiel::hungarian_tarokk::kMaxAnnouncementDecisions)
       // Pickle support
       .def(py::pickle(
           [](const HungarianTarokkState& state) {  // __getstate__
